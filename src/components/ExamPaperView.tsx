@@ -205,80 +205,50 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
         style={{ minHeight: '29.7cm' }}
       >
         
-        {/* RESMÎ MEB SINAV BAŞLIĞI */}
-        <div className="border-2 border-black p-4 mb-4 text-center">
-          <div className="text-sm sm:text-base font-bold tracking-wider uppercase mb-1">
-            T.C.
-          </div>
-          <div className="text-base sm:text-lg font-extrabold tracking-wide uppercase mb-1">
-            {header.schoolName}
-          </div>
-          <div className="text-xs sm:text-sm font-bold uppercase tracking-normal">
-            {header.academicYear} &bull; {header.termAndExam}
-          </div>
-        </div>
-
-        {/* ÖĞRENCİ VE DERS BİLGİ TABLOSU */}
-        <table className="w-full border-collapse border border-black mb-6 text-xs sm:text-sm">
+        {/* BİRLEŞTİRİLMİŞ KOMPAKT RESMÎ MEB SINAV BAŞLIĞI VE ÖĞRENCİ BİLGİ TABLOSU */}
+        <table className="w-full border-collapse border-2 border-black mb-3 text-xs leading-tight">
           <tbody>
             <tr>
-              <td className="border border-black p-2 font-semibold w-1/4 bg-slate-50/50 print:bg-transparent">
-                DERS:
-              </td>
-              <td className="border border-black p-2 w-1/4 font-bold">
-                {header.course}
-              </td>
-              <td className="border border-black p-2 font-semibold w-1/4 bg-slate-50/50 print:bg-transparent">
-                ADI SOYADI:
-              </td>
-              <td className="border border-black p-2 w-1/4">
-                &nbsp;
-              </td>
-            </tr>
-            <tr>
-              <td className="border border-black p-2 font-semibold bg-slate-50/50 print:bg-transparent">
-                SINIFI / ŞUBESİ:
-              </td>
-              <td className="border border-black p-2 font-bold">
-                {header.grade} / ...........
-              </td>
-              <td className="border border-black p-2 font-semibold bg-slate-50/50 print:bg-transparent">
-                NUMARASI:
-              </td>
-              <td className="border border-black p-2">
-                &nbsp;
-              </td>
-            </tr>
-            <tr>
-              <td className="border border-black p-2 font-semibold bg-slate-50/50 print:bg-transparent">
-                TARİH:
-              </td>
-              <td className="border border-black p-2">
-                {header.date || '..... / ..... / 202...'}
-              </td>
-              <td className="border border-black p-2 font-semibold bg-slate-50/50 print:bg-transparent">
-                ALDIĞI NOT:
-              </td>
-              <td className="border border-black p-2 text-xs">
-                <div className="flex flex-col gap-1">
-                  <div><strong>Rakamla:</strong> ..............................</div>
-                  <div><strong>Yazıyla:</strong> ..............................</div>
+              <td colSpan={3} className="border border-black py-1.5 px-3 text-center">
+                <div className="text-xs sm:text-sm font-extrabold tracking-wide uppercase leading-tight">
+                  T.C. {header.schoolName}
+                </div>
+                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-normal leading-tight mt-0.5">
+                  {header.academicYear} &bull; {header.course ? `${header.course} DERSİ ` : ''}{header.termAndExam}
                 </div>
               </td>
             </tr>
             <tr>
-              <td colSpan={4} className="border border-black p-2 text-xs italic bg-slate-100/70 print:bg-transparent">
-                <div className="flex items-center justify-between">
-                  <span><strong>Sınav Süresi:</strong> {header.duration}</span>
-                  <span><strong>Toplam Puan:</strong> {totalCalculatedPoints} Puan</span>
-                </div>
+              <td className="border border-black py-1 px-2.5 w-[38%]">
+                <span className="font-semibold">Ders:</span> <strong className="font-bold">{header.course}</strong>
+                <span className="mx-1.5 text-slate-400">|</span>
+                <span className="font-semibold">Sınıf:</span> <strong className="font-bold">{header.grade} / ....</strong>
+              </td>
+              <td className="border border-black py-1 px-2.5 w-[34%]">
+                <span className="font-semibold">Adı Soyadı:</span>
+              </td>
+              <td rowSpan={2} className="border border-black py-1 px-2.5 w-[28%] align-middle text-[11px] leading-snug">
+                <div><strong>Aldığı Not</strong> &nbsp; <strong>Rakamla:</strong> ...............</div>
+                <div className="mt-0.5"><strong>Yazıyla:</strong> ......................................</div>
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black py-1 px-2.5">
+                <span className="font-semibold">Tarih:</span> {header.date || '.../.../202..'}
+                <span className="mx-1.5 text-slate-400">|</span>
+                <span className="font-semibold">Süre:</span> {header.duration}
+              </td>
+              <td className="border border-black py-1 px-2.5">
+                <span className="font-semibold">Numarası:</span> .................
+                <span className="mx-1.5 text-slate-400">|</span>
+                <span className="font-semibold">Puan:</span> {totalCalculatedPoints}
               </td>
             </tr>
           </tbody>
         </table>
 
         {/* SORULAR LİSTESİ */}
-        <div className="space-y-6">
+        <div className="space-y-3">
           {questions.map((q, idx) => {
             const isEditing = editingId === q.id;
             const isSelected = selectedQuestionId === q.id;
@@ -591,67 +561,68 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
                     className="cursor-pointer"
                     title="Bu soruyu değiştirmek / alternatif soru üretmek için tıklayın"
                   >
-                    {/* Soru Başlığı */}
-                    <div className="flex items-baseline justify-between mb-1.5">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="font-bold text-base sm:text-lg">
-                          {q.number}.
-                        </span>
-                        <span className="font-bold text-sm sm:text-base">
-                          ({q.points} Puan)
-                        </span>
-                        
-                        {/* TYMM Etiketi (Opsiyonel) */}
+                    {/* TYMM Etiketi (Opsiyonel) veya Hover İpucu */}
+                    {(showOutcomesOnPaper || true) && (
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
                         {showOutcomesOnPaper && (
-                          <span className="text-[10px] font-sans px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
+                          <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
                             {q.learningOutcome} &bull; {q.processComponent}
                           </span>
                         )}
-
-                        <span className="hidden group-hover:inline-flex print:hidden items-center gap-1 text-[11px] font-sans font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        <span className="hidden group-hover:inline-flex print:hidden items-center gap-1 text-[10px] font-sans font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                           <RefreshCw className="w-2.5 h-2.5" />
                           Değiştirmek için soruya tıklayın
                         </span>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Soru Bağlamı / Senaryosu (Varsa) */}
-                    {cleanPageReferences(q.context) && (
-                      <div className="border-l-2 border-black pl-3.5 py-1 mb-2.5 italic text-slate-800 text-justify bg-slate-50/40 print:bg-transparent">
-                        {cleanPageReferences(q.context)}
+                    {/* Soru Bağlamı ve Soru Kökü (Kağıt Tasarruflu Kompakt Görünüm) */}
+                    {cleanPageReferences(q.context) ? (
+                      <>
+                        <div className="mb-1 text-slate-900 text-justify leading-snug">
+                          <span className="font-bold mr-1">
+                            {q.number}.
+                          </span>
+                          <span className="italic">{cleanPageReferences(q.context)}</span>
+                        </div>
+                        <div className="font-bold mb-1.5 text-justify leading-snug">
+                          {cleanPageReferences(q.questionText)} ({q.points} Puan)
+                        </div>
+                      </>
+                    ) : (
+                      <div className="font-bold mb-1.5 text-justify leading-snug">
+                        <span className="mr-1">
+                          {q.number}.
+                        </span>
+                        <span>{cleanPageReferences(q.questionText)} ({q.points} Puan)</span>
                       </div>
                     )}
 
-                    {/* Soru Kökü */}
-                    <div className="font-bold mb-2 text-justify leading-relaxed">
-                      {cleanPageReferences(q.questionText)}
-                    </div>
-
                     {/* Alt Sorular (Maddeli için) */}
                     {q.subQuestions && q.subQuestions.length > 0 && (
-                      <div className="pl-4 space-y-1.5 mb-2 font-medium">
+                      <div className="pl-3 space-y-0.5 mb-1.5 font-medium text-xs sm:text-sm leading-snug">
                         {q.subQuestions.map((sub, sIdx) => (
-                          <div key={sIdx} className="flex items-start gap-2">
+                          <div key={sIdx} className="flex items-start gap-1.5">
                             <span className="font-bold">{sub.label}</span>
                             <span className="flex-1">{cleanPageReferences(sub.text)}</span>
-                            <span className="text-xs italic">({sub.points} Puan)</span>
+                            <span className="text-xs italic">({sub.points} P)</span>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* CEVAPLAMA ALANI (Noktalı / Çizgili / Boşluk) */}
-                    <div className="mt-2 mb-2">
+                    {/* CEVAPLAMA ALANI (Kompakt Noktalı / Çizgili / Kutu) */}
+                    <div className="mt-1 mb-1">
                       {lineStyle === 'box' ? (
                         <div 
-                          className="border border-slate-400 rounded p-2 text-[10px] text-slate-400 font-sans"
-                          style={{ minHeight: `${Math.max(60, q.suggestedLines * 22)}px` }}
+                          className="border border-slate-400 rounded p-1.5 text-[10px] text-slate-400 font-sans"
+                          style={{ minHeight: `${Math.max(36, Math.round((q.suggestedLines || 3) * 12))}px` }}
                         >
                           Cevap:
                         </div>
                       ) : (
-                        <div className="space-y-4 pt-1">
-                          {Array.from({ length: q.suggestedLines || 4 }).map((_, lineIdx) => (
+                        <div className="space-y-3 pt-1">
+                          {Array.from({ length: Math.min(4, Math.max(2, Math.round((q.suggestedLines || 3) * 0.6))) }).map((_, lineIdx) => (
                             <div 
                               key={lineIdx} 
                               className={`w-full ${
@@ -673,28 +644,20 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
           })}
         </div>
 
-        {/* EN ALT BİLGİ: ÖĞRETMEN VE İMZA ALANI */}
-        <div className="mt-12 pt-6 border-t-2 border-black page-break-inside-avoid">
-          <div className="flex items-end justify-between text-xs sm:text-sm">
-            
-            <div className="space-y-1">
-              <p className="font-bold italic">
-                {header.note || 'Soruları dikkatlice okuyunuz. Her sorunun cevabını altına bırakılan alana okunaklı şekilde yazınız. Başarılar dileriz.'}
-              </p>
-            </div>
-
-            <div className="text-right space-y-1">
-              <p className="font-bold text-sm">
+        {/* EN ALT BİLGİ: ÖĞRETMEN VE İMZA ALANI (Kompakt Tek Satır) */}
+        <div className="mt-4 pt-2 border-t border-black page-break-inside-avoid">
+          <div className="flex items-center justify-between gap-4 text-[11px] sm:text-xs leading-tight">
+            <p className="italic">
+              {header.note || 'Soruları dikkatlice okuyunuz. Her sorunun cevabını altına bırakılan alana okunaklı şekilde yazınız. Başarılar dileriz.'}
+            </p>
+            <div className="text-right shrink-0">
+              <span className="font-bold">
                 {header.teacherName || '................................'}
-              </p>
-              <p className="text-xs">
-                {header.teacherBranch || ''}
-              </p>
-              <p className="pt-4 text-xs font-medium">
-                İmza: ........................................
-              </p>
+              </span>
+              {header.teacherBranch ? <span className="ml-1">({header.teacherBranch})</span> : null}
+              <span className="mx-2 text-slate-400">|</span>
+              <span className="font-medium">İmza: ........................</span>
             </div>
-
           </div>
         </div>
 

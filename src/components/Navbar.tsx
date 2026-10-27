@@ -133,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all"
                 >
                   <Printer className="w-3.5 h-3.5 text-white" />
-                  <span>Yazdır (A4)</span>
+                  <span>Yazdır/PDF kaydet</span>
                 </button>
               </>
             )}

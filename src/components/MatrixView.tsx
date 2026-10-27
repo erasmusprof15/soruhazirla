@@ -1,5 +1,5 @@
 import React from 'react';
-import { TableProperties, ArrowLeft, Printer, Download } from 'lucide-react';
+import { TableProperties, ArrowLeft } from 'lucide-react';
 import { ExamData } from '../types/exam';
 import { cleanPageReferences } from '../utils/cleanText';
 
@@ -37,29 +37,6 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             <TableProperties className="w-3.5 h-3.5 text-blue-600" />
             3. Aşama: MEB TYMM Konu ve Soru Dağılım Çizelgesi
           </span>
-        </div>
-
-        {/* Aksiyon Butonları */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onExportWord}
-            title="Dağılım Çizelgesini Word (.doc) olarak indir"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-600" />
-            <span>Word İndir (Çizelge)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onPrint}
-            title="Çizelgeyi yazdır veya PDF olarak kaydet"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all"
-          >
-            <Printer className="w-3.5 h-3.5 text-white" />
-            <span>Yazdır (A4)</span>
-          </button>
         </div>
       </div>
 
@@ -124,16 +101,8 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
           </tbody>
         </table>
 
-        {/* Bilgilendirme Notu & İmza */}
-        <div className="mt-8 pt-4 border-t-2 border-black flex items-end justify-between text-xs sm:text-sm">
-          <div className="space-y-1 max-w-lg">
-            <p className="font-semibold text-slate-800 print:text-black">
-              * Öğrenme Çıktısı (Kazanım) ve TYMM Süreç Bileşeni (SB) sütunundaki bilgiler "ders bilgi formu" dokümanından yararlanılarak hazırlanmıştır.
-            </p>
-            <p className="text-slate-500 print:text-black text-[11px]">
-              * Bu tablo MEB Ölçme ve Değerlendirme Yönetmeliği gereği zümre sınav evraklarına eklenir.
-            </p>
-          </div>
+        {/* İmza */}
+        <div className="mt-8 pt-4 border-t-2 border-black flex items-end justify-end text-xs sm:text-sm">
           <div className="text-right shrink-0">
             <p className="font-bold text-sm">{header.teacherName || 'Ders Öğretmeni'}</p>
             <p className="text-xs">{header.teacherBranch || ''}</p>

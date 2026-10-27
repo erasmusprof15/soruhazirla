@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Request, Response } from 'express';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -35,34 +35,63 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Hızlı ve güvenilir model çağrı yardımcısı (gemini-3.5-flash-lite ve yedek modeller)
+// Hızlı ve güvenilir model çağrı yardımcısı (Düşük düşünme gecikmesi + model başına zaman aşımı koruması)
 async function callGeminiWithFallback(options: {
   contents: any[];
   config: any;
 }) {
-  const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
-    'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-3.6-flash',
+  const candidateConfigs: { model: string; thinkingConfig?: any }[] = [
+    {
+      model: 'gemini-3-flash-preview',
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    },
+    {
+      model: 'gemini-2.5-flash',
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+    {
+      model: 'gemini-3.1-flash-lite-preview',
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    },
+    {
+      model: 'gemini-flash-latest',
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   ];
   let lastErr: any = null;
 
-  for (const model of candidateModels) {
+  for (const candidate of candidateConfigs) {
+    let timerId: ReturnType<typeof setTimeout> | null = null;
     try {
-      console.log(`[Gemini Engine] ${model} ile istek başlatılıyor...`);
+      console.log(`[Gemini Engine] ${candidate.model} ile istek başlatılıyor...`);
       const t0 = Date.now();
-      const res = await ai.models.generateContent({
-        model,
-        contents: options.contents,
-        config: options.config,
+
+      const mergedConfig = {
+        ...options.config,
+        ...(candidate.thinkingConfig ? { thinkingConfig: candidate.thinkingConfig } : {}),
+      };
+
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timerId = setTimeout(() => {
+          reject(new Error(`${candidate.model} 40 saniye içinde yanıt vermedi (model zaman aşımı).`));
+        }, 40000);
       });
-      console.log(`[Gemini Engine] ${model} başarılı (${Date.now() - t0} ms)`);
+
+      const res = await Promise.race([
+        ai.models.generateContent({
+          model: candidate.model,
+          contents: options.contents,
+          config: mergedConfig,
+        }),
+        timeoutPromise,
+      ]);
+
+      if (timerId) clearTimeout(timerId);
+      console.log(`[Gemini Engine] ${candidate.model} başarılı (${Date.now() - t0} ms)`);
       return res;
     } catch (err: any) {
-      console.warn(`[Gemini Engine] ${model} başarısız oldu (${err.message || err}), yedek model deneniyor...`);
+      if (timerId) clearTimeout(timerId);
+      console.warn(`[Gemini Engine] ${candidate.model} başarısız oldu (${err.message || err}), yedek model deneniyor...`);
       lastErr = err;
     }
   }
@@ -258,8 +287,8 @@ function buildHomogeneousQuestionBuckets(
     return { scheduleSummary: '', bucketedText: '' };
   }
 
-  // Her soruya düşecek karakter bütçesi (toplam ~110.000 karakter, böylece son sayfalar asla kesilmez)
-  const perQuestionCharBudget = Math.max(4000, Math.floor(110000 / N));
+  // Her soruya düşecek ideal karakter bütçesi (toplam ~28.000 karakter: hem tüm sayfaları kapsar hem de 4-8 saniyede hızlı yanıt üretir)
+  const perQuestionCharBudget = Math.min(4500, Math.max(2000, Math.floor(28000 / N)));
   const scheduleLines: string[] = [];
   const bucketBlocks: string[] = [];
 
@@ -276,14 +305,31 @@ function buildHomogeneousQuestionBuckets(
       assignedPages = [pages[pageIdx]];
     }
 
-    const pageNumsLabel = assignedPages.map((p) => p.num).join(', ');
+    const pageNumsLabel =
+      assignedPages.length > 4
+        ? `${assignedPages[0].num} - ${assignedPages[assignedPages.length - 1].num} (Sayfa ${assignedPages.map((p) => p.num).join(', ')})`
+        : assignedPages.map((p) => p.num).join(', ');
+
     scheduleLines.push(
       `- ${qNum}. SORU -> ZORUNLU OLARAK Sayfa ${pageNumsLabel} içerisindeki konu, kavram ve metinlerden (diğer sorularla aynı konuyu tekrar etmeden) hazırlanacaktır.`
     );
 
-    const perPageLimit = Math.max(1500, Math.floor(perQuestionCharBudget / assignedPages.length));
-    const combinedPageText = assignedPages
-      .map((p) => `[SAYFA ${p.num} İÇERİĞİ]:\n${p.text.slice(0, perPageLimit)}`)
+    // Eğer bir soruya 6'dan fazla sayfa düştüyse, o aralıktan eşit aralıklı 6 temsili sayfa seçerek metin boyutunu optimize et
+    let sampledPages = assignedPages;
+    if (assignedPages.length > 6) {
+      sampledPages = [];
+      for (let s = 0; s < 6; s++) {
+        const idx = Math.min(
+          assignedPages.length - 1,
+          Math.floor((s * assignedPages.length) / 6)
+        );
+        sampledPages.push(assignedPages[idx]);
+      }
+    }
+
+    const perPageLimit = Math.max(600, Math.floor(perQuestionCharBudget / Math.max(1, sampledPages.length)));
+    const combinedPageText = sampledPages
+      .map((p) => (p.text ? `[SAYFA ${p.num} İÇERİĞİ]:\n${p.text.slice(0, perPageLimit)}` : `[SAYFA ${p.num}]`))
       .join('\n\n');
 
     bucketBlocks.push(
@@ -477,6 +523,13 @@ app.post('/api/generate-exam', async (req: Request, res: Response) => {
           questionPageScheduleNotice = scheduleSummary;
           requestedPagesNotice = `ÖĞRETMENİN SEÇTİĞİ SAYFA ARALIĞI: ${rangeSummary}. DİKKAT: Sorular İSTİSNASIZ YALNIZCA bu sayfalardan ve aşağıdaki SORU-SAYFA DAĞILIM PLANINA göre tüm sayfalara/konulara EŞİT (HOMOJEN) dağıtılarak hazırlanacaktır!`;
         } else {
+          // Eğer kitap sayfa numarası ile PDF sıra numarası uyuşmadığı için eşleşme boş döndüyse mevcut dolu sayfaları homojen böl
+          const nonEmptyPages = materialPageList.filter(p => p.text.trim().length > 0);
+          if (nonEmptyPages.length > 0) {
+            const { scheduleSummary, bucketedText } = buildHomogeneousQuestionBuckets(nonEmptyPages, questionCount);
+            filteredMaterialText = bucketedText;
+            questionPageScheduleNotice = scheduleSummary;
+          }
           requestedPagesNotice = `ÖĞRETMENİN SEÇTİĞİ SAYFA ARALIĞI: ${rangeSummary}. DİKKAT: Sorular İSTİSNASIZ YALNIZCA bu sayfalardaki tüm konulara eşit dağıtılarak hazırlanacaktır!`;
         }
       } else {
@@ -496,8 +549,8 @@ app.post('/api/generate-exam', async (req: Request, res: Response) => {
       }
     }
 
-    // Eğer sayfa gruplaması (bucketedText) oluşturulduysa onu kullan, aksi halde tam metni sun
-    const materialSourceText = filteredMaterialText || effectiveMaterialText.slice(0, 90000);
+    // Eğer sayfa gruplaması (bucketedText) oluşturulduysa onu kullan, aksi halde makul boyutta metin sun (28.000 karakter sınırı ile zaman aşımını önle)
+    const materialSourceText = filteredMaterialText || effectiveMaterialText.slice(0, 28000);
 
     const systemInstruction = `Sen Türkiye Cumhuriyeti Millî Eğitim Bakanlığı (MEB) ve Lise Ölçme ve Değerlendirme Uzmanısın.
 
@@ -569,7 +622,7 @@ ${materialSourceText}
 
     if (effectiveSyllabusText) {
       documentBlocks.push(`==================== DOKÜMAN: DERS BİLGİ FORMU - DBF (ÖĞRENME ÇIKTILARI, SÜREÇ BİLEŞENLERİ VE ÖLÇME ESASLARI) ====================
-${effectiveSyllabusText.slice(0, 30000)}
+${effectiveSyllabusText.slice(0, 16000)}
 ===================================================================================================================================`);
     } else if (useSyllabusPdfInline) {
       documentBlocks.push(`[BİLGİ: Ders Bilgi Formu (DBF) PDF dosyası ekte doğrudan görsel/doküman (inlineData) olarak sunulmuştur. Öğrenme çıktıları ve süreç bileşenlerini bu formdan alınız.]`);
@@ -583,7 +636,7 @@ ${effectiveSyllabusText.slice(0, 30000)}
         : `Sınav Dönemi ("${termAndExam}") kapsamına karşılık gelen haftalar (Ara tatil ve yarıyıl tatili sınırlarını dikkate alarak)`;
 
       documentBlocks.push(`==================== DOKÜMAN: YILLIK PLAN (KAZANIMLAR, HAFTALAR/TARİH ARALIĞI, ARA TATİL VE YARIYIL TATİLİ TABLOSU) ====================
-${effectiveAnnualPlanText ? effectiveAnnualPlanText.slice(0, 35000) : '[Yıllık Plan PDF dokümanı ekte inlineData olarak sunulmuştur.]'}
+${effectiveAnnualPlanText ? effectiveAnnualPlanText.slice(0, 16000) : '[Yıllık Plan PDF dokümanı ekte inlineData olarak sunulmuştur.]'}
 =========================================================================================================================================
 ★ YILLIK PLAN ANALİZ VE SORU ÜRETİM TALİMATI:
 1. Yukarıdaki Yıllık Planı satır satır incele: Ay/Hafta/Tarih sütunlarını, Öğrenme Çıktılarını (Kazanımları), Süreç Bileşenlerini, Konu/Ünite/Tema başlıklarını ve "1. Dönem Ara Tatili", "Yarıyıl Tatili (Sömestr)", "2. Dönem Ara Tatili", "Sınav Haftası" bölümlerini tespit et.
@@ -863,23 +916,25 @@ app.post('/api/regenerate-question', async (req: Request, res: Response) => {
     if (requestedPages && requestedPages.length > 0 && materialPageList.length > 0) {
       const matched = materialPageList.filter(p => requestedPages.includes(p.num));
       if (matched.length > 0) {
-        // Tekil soru yenilemede, ilgili soru numarasına düşen sayfa grubunu önceliklendir ve diğer seçili sayfaları da ekle
+        // Tekil soru yenilemede, ilgili soru numarasına düşen sayfa grubunu önceliklendir
         const totalQuestions = Math.max(qNum, Number(config?.questionCount) || 6);
         const M = matched.length;
         const startIdx = Math.floor(((qNum - 1) * M) / totalQuestions);
         const endIdx = Math.max(startIdx, Math.floor((qNum * M) / totalQuestions) - 1);
         const primaryPages = matched.slice(startIdx, endIdx + 1);
         const primaryNums = primaryPages.map(p => p.num).join(', ');
+        const pagesToInclude = primaryPages.length > 0 ? primaryPages : matched.slice(0, 6);
+        const perPageChar = Math.max(1200, Math.floor(15000 / Math.max(1, pagesToInclude.length)));
 
         filteredMaterialText =
           `★ BU SORU (${qNum}. SORU) İÇİN ÖNCELİKLİ SAYFA GRUBU: Sayfa ${primaryNums}\n\n` +
-          matched
-            .map(p => `==================== [SEÇİLEN SAYFA ${p.num}] ====================\n${p.text.slice(0, 6000)}`)
+          pagesToInclude
+            .map(p => `==================== [SEÇİLEN SAYFA ${p.num}] ====================\n${p.text.slice(0, perPageChar)}`)
             .join('\n\n');
       }
     }
 
-    const materialSourceText = filteredMaterialText || effectiveMaterialText.slice(0, 45000);
+    const materialSourceText = filteredMaterialText || effectiveMaterialText.slice(0, 20000);
 
     const existingQuestionsSummary = Array.isArray(otherQuestions) && otherQuestions.length > 0
       ? otherQuestions

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -64,6 +64,20 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
   const [isExtractingAnnualPlan, setIsExtractingAnnualPlan] = useState(false);
   const [annualPlanExtractStatus, setAnnualPlanExtractStatus] = useState<string | null>(null);
   const annualPlanFileRef = useRef<HTMLInputElement>(null);
+
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setElapsedSeconds(0);
+      return;
+    }
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
 
   // 1. DERS MATERYALİ YÜKLEME (Soru ve Bağlam Kaynağı)
   const handleMaterialFile = async (file: File) => {
@@ -1031,29 +1045,11 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
               </div>
             </div>
 
-            {/* Öğretmen Özel Talimatı / Sayfa & Kazanım Sınırı */}
-            <div className="rounded-xl border-2 border-red-200/90 bg-red-50/25 p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-red-600" />
-                  <label className="block text-xs font-bold text-slate-900">
-                    Özel Öğretmen İsteği / Sayfa & Kazanım Sınırı:
-                  </label>
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-                  En Yüksek Öncelikli Kural
-                </span>
-              </div>
-
-              {material.pages && material.pages > 1 && (
-                <div className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-center gap-2">
-                  <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>
-                    Yüklenen doküman <strong>{material.pages} sayfa</strong>. Belirli sayfalardan sormak için örn: <strong>"Sayfa 10-15 arası"</strong> yazabilirsiniz.
-                  </span>
-                </div>
-              )}
-
+            {/* Özel Öğretmen İsteği */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-900">
+                Özel Öğretmen İsteği
+              </label>
               <textarea
                 rows={3}
                 value={config.customPrompt}
@@ -1061,64 +1057,19 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
                 placeholder="Örn: '15-20. sayfalar arasından soru hazırla', 'Yalnızca hücresel solunum konusunu sor', '2 soru deney ve grafik yorumlama olsun'..."
                 className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden leading-relaxed shadow-2xs text-slate-900"
               />
-
-              {/* Hızlı Şablon Butonları */}
-              <div className="space-y-1">
-                <div className="text-[10px] font-semibold text-slate-500">
-                  Hızlı Ekle (Tıklayarak istek kutusuna ekleyebilirsiniz):
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: '📄 Sayfa Aralığı', template: 'Sayfa 10-15 arasındaki konulardan hazırla' },
-                    { label: '📅 Yıllık Plan Aralığı', template: 'Yıllık planda 1. Dönem Ara Tatiline kadar olan haftalardaki kazanımlardan hazırla' },
-                    { label: '🎯 Tek Konu Odaklı', template: 'Yalnızca belirtilen temel konudan ve kavramlardan sor' },
-                  ].map((btn) => (
-                    <button
-                      key={btn.label}
-                      type="button"
-                      onClick={() => {
-                        const current = config.customPrompt.trim();
-                        const updated = current ? `${current}. ${btn.template}` : btn.template;
-                        onConfigChange({ ...config, customPrompt: updated });
-                      }}
-                      className="text-[11px] font-medium px-2 py-1 bg-white hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200 hover:border-red-300 rounded-md transition-all shadow-2xs"
-                    >
-                      {btn.label}
-                    </button>
-                  ))}
-                  {config.customPrompt && (
-                    <button
-                      type="button"
-                      onClick={() => onConfigChange({ ...config, customPrompt: '' })}
-                      className="text-[10px] text-slate-400 hover:text-red-600 px-1 py-1"
-                    >
-                      Temizle
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <p className="text-[10px] text-slate-500 leading-normal">
-                💡 <strong>Kesin Kural:</strong> Buraya yazdığınız sayfa aralığı (örn: "Sayfa 10-15 arası") veya konu kısıtlaması yapay zekâ tarafından en yüksek öncelikle zorunlu tutulur; başka sayfalardan kesinlikle soru üretilmez.
-              </p>
             </div>
 
             {/* GENERATE ACTION BUTTON OR SINGLE TRANSPARENT PROGRESS PANEL */}
             <div className="pt-2">
               {!isGenerating ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={onGenerate}
-                    className="w-full flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-red-800 rounded-xl shadow-lg shadow-red-600/25 transition-all transform active:scale-[0.99]"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    <span>Sınav Kağıdı & Rubriği Oluştur</span>
-                  </button>
-                  <p className="text-[11px] text-slate-400 text-center mt-2">
-                    Türkiye Yüzyılı Maarif Modeli öğrenme çıktıları & süreç bileşenleri otomatik atanır.
-                  </p>
-                </>
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-red-800 rounded-xl shadow-lg shadow-red-600/25 transition-all transform active:scale-[0.99]"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  <span>Sınav Kağıdı & Rubriği Oluştur</span>
+                </button>
               ) : (
                 <div className="p-4 bg-white border-2 border-red-200 rounded-2xl shadow-sm space-y-3.5">
                   {/* Üst Başlık ve İlerleme Çubuğu */}
@@ -1132,17 +1083,22 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
                             : 'Sınav Kağıdı ve Cevap Anahtarı Hazırlanıyor...'}
                         </span>
                       </div>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
-                        {generationStage <= 1
-                          ? 'Aşama 1 / 4'
-                          : generationStage === 2
-                          ? 'Aşama 2 / 4'
-                          : generationStage === 3
-                          ? 'Aşama 3 / 4'
-                          : generationStage === 4
-                          ? 'Aşama 4 / 4'
-                          : 'Tamamlandı'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-slate-500 tabular-nums">
+                          {elapsedSeconds} sn
+                        </span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                          {generationStage <= 1
+                            ? 'Aşama 1 / 4'
+                            : generationStage === 2
+                            ? 'Aşama 2 / 4'
+                            : generationStage === 3
+                            ? 'Aşama 3 / 4'
+                            : generationStage === 4
+                            ? 'Aşama 4 / 4'
+                            : 'Tamamlandı'}
+                        </span>
+                      </div>
                     </div>
                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                       <div
@@ -1154,9 +1110,9 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
                               : generationStage === 2
                               ? '55%'
                               : generationStage === 3
-                              ? '80%'
+                              ? '78%'
                               : generationStage === 4
-                              ? '94%'
+                              ? `${Math.min(98, 85 + Math.max(0, elapsedSeconds - 6) * 1.5)}%`
                               : '100%',
                         }}
                       />

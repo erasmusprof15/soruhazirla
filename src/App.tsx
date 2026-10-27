@@ -290,16 +290,52 @@ export default function App() {
     abortControllerRef.current = controller;
 
     // Aşamalı şeffaf ilerleme zamanlayıcıları
-    const stageTimer1 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 2 ? 2 : s)), 1100);
-    const stageTimer2 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 3 ? 3 : s)), 3200);
-    const stageTimer3 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 4 ? 4 : s)), 5200);
+    const stageTimer1 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 2 ? 2 : s)), 1400);
+    const stageTimer2 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 3 ? 3 : s)), 4200);
+    const stageTimer3 = setTimeout(() => setGenerationStage((s) => (s > 0 && s < 4 ? 4 : s)), 6800);
 
-    // 120 saniyelik cömert zaman aşımı
+    // 150 saniyelik cömert zaman aşımı
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 120000);
+    }, 150000);
 
     try {
+      // Eğer çok büyük bir PDF yüklendiyse ve sayfa aralığı girildiyse ağ yükünü azaltmak için seçili sayfaları filtrele
+      let optimizedMaterialText = material.text || '';
+      const pStart = parseInt(String(material.pageRangeStart || '').trim(), 10);
+      const pEnd = parseInt(String(material.pageRangeEnd || '').trim(), 10);
+      if (
+        optimizedMaterialText.length > 40000 &&
+        optimizedMaterialText.includes('[SAYFA') &&
+        (!isNaN(pStart) || !isNaN(pEnd))
+      ) {
+        const sNum = !isNaN(pStart) && pStart > 0 ? pStart : 1;
+        const eNum = !isNaN(pEnd) && pEnd >= sNum ? pEnd : 9999;
+        const pageSplitRegex = /===\s*\[SAYFA\s*(\d+)\]\s*===/gi;
+        const parts = optimizedMaterialText.split(/===\s*\[SAYFA\s*\d+\]\s*===/gi);
+        const matches = [...optimizedMaterialText.matchAll(pageSplitRegex)];
+        const selectedBlocks: string[] = [];
+        for (let i = 0; i < matches.length; i++) {
+          const pNum = parseInt(matches[i][1], 10);
+          const pText = (parts[i + 1] || '').trim();
+          if (pNum >= sNum && pNum <= eNum && pText) {
+            selectedBlocks.push(`=== [SAYFA ${pNum}] ===\n${pText}`);
+          }
+        }
+        if (selectedBlocks.length > 0) {
+          optimizedMaterialText = selectedBlocks.join('\n\n');
+        }
+      }
+
+      const payloadMaterial: MaterialInput = {
+        ...material,
+        text: optimizedMaterialText,
+        // Metin zaten ayıklanmışsa base64 göndererek isteği şişirme
+        pdfBase64: optimizedMaterialText ? undefined : material.pdfBase64,
+        syllabusPdfBase64: material.syllabusText ? undefined : material.syllabusPdfBase64,
+        annualPlanPdfBase64: material.annualPlanText ? undefined : material.annualPlanPdfBase64,
+      };
+
       const response = await fetch('/api/generate-exam', {
         method: 'POST',
         headers: {
@@ -309,7 +345,7 @@ export default function App() {
         body: JSON.stringify({
           header,
           config,
-          material,
+          material: payloadMaterial,
         }),
       });
 
@@ -545,14 +581,11 @@ export default function App() {
       </main>
 
       {/* Alt Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">MaarifSınav</span>
-          </div>
-          <div className="flex items-center gap-4 font-semibold text-slate-700">
-            <span>Design By T.ÜNAL</span>
-          </div>
+      <footer className="bg-black py-4 print:hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center text-center">
+          <span className="text-sm font-bold text-red-600 tracking-wide">
+            Design By TyfR©MaarifSınav
+          </span>
         </div>
       </footer>
 
