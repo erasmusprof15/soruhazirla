@@ -1,0 +1,8 @@
+{
+  "name": "MaarifSınav - TYMM Uyumlu Lise Sınav & Rubrik Hazırlayıcı",
+  "description": "Türkiye Yüzyılı Maarif Modeli (TYMM) standartlarında ders materyali ve PDF'lerden lise yazılı sınav kağıdı ve dereceli puanlama anahtarı (rubrik) oluşturan öğretmen asistanı.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
