@@ -1,5 +1,5 @@
 import { ExamData } from '../types/exam';
-import { cleanPageReferences } from './cleanText';
+import { cleanPageReferences, isTopicHeading } from './cleanText';
 
 export function printDocument(elementId: string) {
   const content = document.getElementById(elementId);
@@ -39,73 +39,74 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
   // 1. SINAV KAĞIDI (Kağıt Tasarruflu Kompakt Resmî Düzen)
   if (type === 'exam' || type === 'both') {
     bodyHtml += `
-      <div style="font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; max-width: 100%; margin: 0 auto; color: #000;">
+      <div style="font-family: 'Segoe UI', 'Calibri', Arial, sans-serif; max-width: 100%; margin: 0 auto; color: #000;">
         <!-- Birleştirilmiş Kompakt Başlık ve Öğrenci Bilgi Tablosu -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 6pt; border: 1.2pt solid #000; font-size: 9pt; line-height: 1.1;">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 5pt; border: 1.2pt solid #000; font-size: 8.5pt; line-height: 1.1;">
           <tr>
-            <td colspan="3" style="border: 1pt solid #000; padding: 3pt 6pt; text-align: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; line-height: 1.15;">
+            <td colspan="3" style="border: 1pt solid #000; padding: 3pt 6pt; text-align: center; font-weight: bold; font-size: 9pt; text-transform: uppercase; line-height: 1.15;">
               T.C. ${exam.header.schoolName || 'MİLLÎ EĞİTİM BAKANLIĞI'}<br />
-              <span style="font-size: 9pt;">${exam.header.academicYear} &bull; ${exam.header.course ? `${exam.header.course} DERSİ ` : ''}${exam.header.termAndExam}</span>
+              <span style="font-size: 8.5pt;">${exam.header.academicYear} &bull; ${exam.header.course ? `${exam.header.course} DERSİ ` : ''}${exam.header.termAndExam}</span>
             </td>
           </tr>
           <tr>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 38%;">
-              <strong>Ders:</strong> ${exam.header.course} &nbsp;|&nbsp; <strong>Sınıf:</strong> ${exam.header.grade} / ....
+            <td style="border: 0.75pt solid #000; padding: 2pt 5pt; width: 38%;">
+              <strong>Sınıf:</strong> ${exam.header.grade} / ....
             </td>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 34%;">
+            <td style="border: 0.75pt solid #000; padding: 2pt 5pt; width: 34%;">
               <strong>Adı Soyadı:</strong>
             </td>
-            <td rowspan="2" style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 28%; vertical-align: middle; font-size: 8.5pt; line-height: 1.25;">
+            <td rowspan="2" style="border: 0.75pt solid #000; padding: 2pt 5pt; width: 28%; vertical-align: middle; font-size: 8pt; line-height: 1.2;">
               <strong>Aldığı Not</strong> &nbsp; <strong>Rakamla:</strong> ...............<br />
               <strong>Yazıyla:</strong> ......................................
             </td>
           </tr>
           <tr>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt;">
+            <td style="border: 0.75pt solid #000; padding: 2pt 5pt;">
               <strong>Tarih:</strong> ${exam.header.date || '.../.../202..'} &nbsp;|&nbsp; <strong>Süre:</strong> ${exam.header.duration}
             </td>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt;">
-              <strong>Numarası:</strong> .................... &nbsp;|&nbsp; <strong>Puan:</strong> ${totalPoints}
+            <td style="border: 0.75pt solid #000; padding: 2pt 5pt;">
+              <strong>Numarası:</strong> ....................
             </td>
           </tr>
         </table>
 
         <!-- Kompakt Sorular Listesi -->
-        <div style="margin-top: 4pt;">
+        <div style="margin-top: 2pt;">
           ${exam.questions.map((q) => {
             const cleanedContext = cleanPageReferences(q.context);
+            const isValidContext = cleanedContext && !isTopicHeading(cleanedContext);
             const compactLineCount = Math.min(4, Math.max(2, Math.round((Number(q.suggestedLines) || 3) * 0.6)));
             const answerLinesHtml = Array.from({ length: compactLineCount })
-              .map(() => `<div style="border-bottom: 0.6pt dotted #999; height: 12pt; width: 100%;">&nbsp;</div>`)
+              .map(() => `<div style="border-bottom: 0.6pt dotted #999; height: 10pt; line-height: 10pt; font-size: 1pt; width: 100%; margin: 0; padding: 0;">&nbsp;</div>`)
               .join('');
 
             return `
-            <div style="margin-bottom: 6pt; page-break-inside: avoid;">
+            <div style="margin-bottom: 3.5pt; page-break-inside: avoid;">
               ${
-                cleanedContext
-                  ? `<div style="font-size: 9.5pt; line-height: 1.15; margin-bottom: 1.5pt; text-align: justify;">
-                      <strong>${q.number}.</strong> <em>${formatText(q.context)}</em>
+                isValidContext
+                  ? `<div style="font-size: 8.5pt; font-weight: normal; line-height: 1.15; margin-bottom: 1pt; text-align: justify;">
+                      <strong>${q.number}.</strong> <em>${formatText(cleanedContext)}</em>
                     </div>
-                    <div style="font-size: 9.5pt; font-weight: bold; line-height: 1.15; margin-bottom: 2pt; text-align: justify;">
-                      ${formatText(q.questionText)} (${q.points} Puan)
+                    <div style="font-size: 8.5pt; font-weight: normal; line-height: 1.15; margin-bottom: 1.5pt; text-align: justify;">
+                      ${formatText(q.questionText)} <strong>(${q.points} Puan)</strong>
                     </div>`
-                  : `<div style="font-size: 9.5pt; line-height: 1.15; margin-bottom: 2pt; text-align: justify;">
-                      <strong>${q.number}. ${formatText(q.questionText)} (${q.points} Puan)</strong>
+                  : `<div style="font-size: 8.5pt; font-weight: normal; line-height: 1.15; margin-bottom: 1.5pt; text-align: justify;">
+                      <strong>${q.number}.</strong> ${formatText(q.questionText)} <strong>(${q.points} Puan)</strong>
                     </div>`
               }
               ${
                 q.subQuestions && q.subQuestions.length > 0
-                  ? `<div style="margin-left: 8pt; margin-bottom: 2pt;">
+                  ? `<div style="margin-left: 8pt; margin-bottom: 1.5pt;">
                       ${q.subQuestions
                         .map(
                           (sub) =>
-                            `<div style="margin-bottom: 1pt; font-size: 9pt; line-height: 1.15;"><strong>${sub.label}</strong> ${formatText(sub.text)} <em>(${sub.points} P)</em></div>`
+                            `<div style="margin-bottom: 1pt; font-size: 8pt; font-weight: normal; line-height: 1.15;"><strong>${sub.label}</strong> ${formatText(sub.text)} <em>(${sub.points} P)</em></div>`
                         )
                         .join('')}
                     </div>`
                   : ''
               }
-              <div style="margin-top: 1pt; margin-bottom: 2pt;">
+              <div style="margin-top: 1pt; margin-bottom: 1pt;">
                 ${answerLinesHtml}
               </div>
             </div>
@@ -114,16 +115,17 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
         </div>
 
         <!-- Kompakt Alt Yönerge ve İmza Satırı -->
-        <table style="width: 100%; margin-top: 6pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid;">
+        <table style="width: 100%; margin-top: 4pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid;">
           <tr>
-            <td style="width: 62%; padding-top: 3pt; text-align: left; font-size: 8.5pt; line-height: 1.15;">
+            <td style="width: 62%; padding-top: 2pt; text-align: left; font-size: 8pt; line-height: 1.15;">
               <em>${formatText(exam.header.note || 'Soruları dikkatlice okuyunuz. Her sorunun cevabını altına bırakılan alana okunaklı şekilde yazınız. Başarılar dileriz.')}</em>
             </td>
-            <td style="width: 38%; padding-top: 3pt; text-align: right; font-size: 9pt; line-height: 1.15;">
+            <td style="width: 38%; padding-top: 2pt; text-align: right; font-size: 8.5pt; line-height: 1.15;">
               <strong>${exam.header.teacherName || ''}</strong> ${exam.header.teacherBranch ? `(${exam.header.teacherBranch})` : ''} &nbsp;|&nbsp; İmza: ...............
             </td>
           </tr>
         </table>
+        <p style="margin: 0; padding: 0; font-size: 1pt; line-height: 1pt; height: 1pt; mso-line-height-rule: exactly;">&nbsp;</p>
       </div>
     `;
   }
@@ -140,23 +142,18 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
         <!-- BÜTÜNLEŞİK RESMÎ BAŞLIK VE BİLGİ TABLOSU -->
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 6pt; border: 1.2pt solid #000; font-size: 9pt; line-height: 1.15;">
           <tr>
-            <td colspan="4" style="border: 1pt solid #000; padding: 3.5pt 6pt; text-align: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; line-height: 1.2;">
+            <td colspan="3" style="border: 1pt solid #000; padding: 3.5pt 6pt; text-align: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; line-height: 1.2;">
               T.C. ${exam.header.schoolName || 'MİLLÎ EĞİTİM BAKANLIĞI'}<br />
               <span style="font-size: 9pt;">${exam.header.academicYear} &bull; ${exam.header.course ? `${exam.header.course} DERSİ ` : ''}${exam.header.grade} &bull; ${exam.header.termAndExam}</span><br />
               <span style="font-size: 8.5pt;">
-                ${
-                  exam.header.grade?.includes('9')
-                    ? 'TÜRKİYE YÜZYILI MAARİF MODELİ (TYMM) CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI'
-                    : 'MEB CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI'
-                }
+                CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI
               </span>
             </td>
           </tr>
           <tr style="background-color: #f8fafc;">
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 28%;"><strong>Ders:</strong> ${exam.header.course || '-'}</td>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 22%;"><strong>Sınıf:</strong> ${exam.header.grade || '-'}</td>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 25%;"><strong>Sınav Süresi:</strong> ${exam.header.duration || '-'}</td>
-            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 25%;"><strong>Toplam Puan:</strong> ${totalPoints} Puan</td>
+            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 33.3%;"><strong>Sınıf:</strong> ${exam.header.grade || '-'}</td>
+            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 33.3%;"><strong>Sınav Süresi:</strong> ${exam.header.duration || '-'}</td>
+            <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; width: 33.4%;"><strong>Toplam Puan:</strong> ${totalPoints} Puan</td>
           </tr>
         </table>
 
@@ -199,6 +196,11 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
                 <tr>
                   <td colspan="3" style="border: 0.75pt solid #000; padding: 2.5pt 5pt; background-color: #ffffff;">
                     <strong>Soru:</strong> <em>${formatText(q.questionText)}</em>
+                    ${
+                      q.materialRef
+                        ? `<div style="font-size: 8pt; color: #334155; margin-top: 2pt;"><strong>Kaynak / İlgili Bölüm:</strong> ${formatText(q.materialRef)}</div>`
+                        : ''
+                    }
                     ${subQuestionsHtml}
                   </td>
                 </tr>
@@ -271,21 +273,17 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
         </div>
 
         <!-- KOMPAKT ALT ÖĞRETMEN İMZA SATIRI -->
-        <table style="width: 100%; margin-top: 6pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid; font-size: 8.5pt;">
+        <table style="width: 100%; margin-top: 5pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid; font-size: 8.5pt;">
           <tr>
-            <td style="width: 60%; padding-top: 3pt; text-align: left;">
-              ${
-                exam.header.grade?.includes('9')
-                  ? 'Türkiye Yüzyılı Maarif Modeli Ölçme ve Değerlendirme Kriterleri'
-                  : 'MEB Ortaöğretim Ölçme ve Değerlendirme Kriterleri'
-              } &nbsp;|&nbsp; Tarih: ${exam.header.date || new Date().toLocaleDateString('tr-TR')}
+            <td style="width: 50%; padding-top: 2.5pt; text-align: left;">
+              Tarih: ${exam.header.date || new Date().toLocaleDateString('tr-TR')}
             </td>
-            <td style="width: 40%; padding-top: 3pt; text-align: right;">
+            <td style="width: 50%; padding-top: 2.5pt; text-align: right;">
               <strong>${exam.header.teacherName || '................................'}</strong> ${exam.header.teacherBranch ? `(${exam.header.teacherBranch})` : ''} &nbsp;|&nbsp; İmza: ...............
             </td>
           </tr>
         </table>
-
+        <p style="margin: 0; padding: 0; font-size: 1pt; line-height: 1pt; height: 1pt; mso-line-height-rule: exactly;">&nbsp;</p>
       </div>
     `;
   }
@@ -294,68 +292,65 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
   if (type === 'matrix') {
     bodyHtml += `
       <div style="font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; max-width: 100%; margin: 0 auto; color: #000;">
-        <table style="width: 100%; border-collapse: collapse; border: 1.2pt solid #000; font-size: 9pt; margin-bottom: 8pt;">
+        <table style="width: 100%; border-collapse: collapse; border: 1.2pt solid #000; font-size: 9pt; margin-bottom: 6pt;">
           <thead>
             <tr>
-              <th colspan="5" style="border: 1pt solid #000; padding: 4pt 6pt; text-align: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; line-height: 1.2;">
+              <th colspan="5" style="border: 1pt solid #000; padding: 3.5pt 6pt; text-align: center; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; line-height: 1.2;">
                 T.C. ${exam.header.schoolName || 'MİLLÎ EĞİTİM BAKANLIĞI'}<br />
                 <span style="font-size: 9pt;">${exam.header.academicYear} &bull; ${exam.header.course} DERSİ ${exam.header.grade}</span><br />
                 <span style="font-size: 8.5pt;">
-                  ${exam.header.termAndExam} &bull; ${
-                    exam.header.grade?.includes('9')
-                      ? 'TÜRKİYE YÜZYILI MAARİF MODELİ (TYMM) SORU VE KAZANIM DAĞILIM TABLOSU'
-                      : 'MEB ORTAÖĞRETİM KAZANIM VE SORU DAĞILIM TABLOSU'
-                  }
+                  ${exam.header.termAndExam} &bull; SORU VE KAZANIM DAĞILIM TABLOSU
                 </span>
               </th>
             </tr>
             <tr style="background-color: #f1f5f9; text-align: center; font-weight: bold;">
-              <th style="border: 0.75pt solid #000; padding: 3.5pt 5pt; width: 10%;">Soru No</th>
-              <th style="border: 0.75pt solid #000; padding: 3.5pt 5pt; width: 18%;">Madde / Soru Türü</th>
-              <th style="border: 0.75pt solid #000; padding: 3.5pt 5pt; width: 36%; text-align: left;">Öğrenme Çıktısı (Kazanım)</th>
-              <th style="border: 0.75pt solid #000; padding: 3.5pt 5pt; width: 26%; text-align: left;">TYMM Süreç Bileşeni (SB)</th>
-              <th style="border: 0.75pt solid #000; padding: 3.5pt 5pt; width: 10%;">Soru Puanı</th>
+              <th style="border: 0.75pt solid #000; padding: 3pt 5pt; width: 10%;">Soru No</th>
+              <th style="border: 0.75pt solid #000; padding: 3pt 5pt; width: 18%;">Madde / Soru Türü</th>
+              <th style="border: 0.75pt solid #000; padding: 3pt 5pt; width: 36%; text-align: left;">Öğrenme Çıktısı (Kazanım)</th>
+              <th style="border: 0.75pt solid #000; padding: 3pt 5pt; width: 26%; text-align: left;">TYMM Süreç Bileşeni (SB)</th>
+              <th style="border: 0.75pt solid #000; padding: 3pt 5pt; width: 10%;">Soru Puanı</th>
             </tr>
           </thead>
           <tbody>
             ${exam.questions.map((q) => `
               <tr style="page-break-inside: avoid;">
-                <td style="border: 0.75pt solid #000; padding: 3pt 5pt; text-align: center; font-weight: bold;">
+                <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; text-align: center; font-weight: bold;">
                   S${q.number}
                 </td>
-                <td style="border: 0.75pt solid #000; padding: 3pt 5pt; text-align: center;">
+                <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; text-align: center;">
                   ${q.typeLabel}
                 </td>
-                <td style="border: 0.75pt solid #000; padding: 3pt 5pt;">
+                <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt;">
                   ${formatText(q.learningOutcome)}
                 </td>
-                <td style="border: 0.75pt solid #000; padding: 3pt 5pt;">
+                <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt;">
                   ${formatText(q.processComponent)}
                 </td>
-                <td style="border: 0.75pt solid #000; padding: 3pt 5pt; text-align: center; font-weight: bold;">
+                <td style="border: 0.75pt solid #000; padding: 2.5pt 5pt; text-align: center; font-weight: bold;">
                   ${q.points} P
                 </td>
               </tr>
             `).join('')}
             <tr style="background-color: #f8fafc; font-weight: bold;">
-              <td colspan="4" style="border: 0.75pt solid #000; padding: 3.5pt 5pt; text-align: right; text-transform: uppercase;">
+              <td colspan="4" style="border: 0.75pt solid #000; padding: 3pt 5pt; text-align: right; text-transform: uppercase;">
                 Toplam Sınav Puanı:
               </td>
-              <td style="border: 0.75pt solid #000; padding: 3.5pt 5pt; text-align: center; font-size: 9.5pt;">
+              <td style="border: 0.75pt solid #000; padding: 3pt 5pt; text-align: center; font-size: 9.5pt;">
                 ${totalPoints} Puan
               </td>
             </tr>
           </tbody>
         </table>
 
-        <table style="width: 100%; margin-top: 6pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid; font-size: 9pt;">
+        <table style="width: 100%; margin-top: 5pt; border-top: 0.75pt solid #000; border-collapse: collapse; page-break-inside: avoid; font-size: 9pt;">
           <tr>
-            <td style="width: 50%; padding-top: 3pt;"></td>
-            <td style="width: 50%; padding-top: 3pt; text-align: right;">
+            <td style="width: 50%; padding-top: 2.5pt;"></td>
+            <td style="width: 50%; padding-top: 2.5pt; text-align: right;">
               <strong>${exam.header.teacherName || 'Ders Öğretmeni'}</strong> ${exam.header.teacherBranch ? `(${exam.header.teacherBranch})` : ''} &nbsp;|&nbsp; İmza: ........................
             </td>
           </tr>
         </table>
+        <p style="margin: 0; padding: 0; font-size: 1pt; line-height: 1pt; height: 1pt; mso-line-height-rule: exactly;">&nbsp;</p>
       </div>
     `;
   }
@@ -378,15 +373,19 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
       <style>
         @page Section1 {
           size: 595.3pt 841.9pt; /* A4 */
-          margin: 0.8cm 1.0cm 0.8cm 1.0cm;
-          mso-header-margin: 18pt;
-          mso-footer-margin: 18pt;
+          margin: 0.6cm 0.8cm 0.5cm 0.8cm;
+          mso-header-margin: 0pt;
+          mso-footer-margin: 0pt;
           mso-paper-source: 0;
         }
-        div.Section1 { page: Section1; }
+        div.Section1 { 
+          page: Section1;
+          margin: 0;
+          padding: 0;
+        }
         body { 
           font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; 
-          font-size: 9.5pt; 
+          font-size: 9pt; 
           line-height: 1.15; 
           color: #000000;
           margin: 0;
@@ -398,14 +397,20 @@ export function exportExamToWord(exam: ExamData, type: 'exam' | 'rubric' | 'matr
           mso-margin-top-alt: 0pt;
           mso-margin-bottom-alt: 0pt;
         }
+        p.MsoNormal, li.MsoNormal, div.MsoNormal {
+          margin: 0pt;
+          margin-bottom: 0.0001pt;
+          font-size: 9pt;
+          font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+        }
         table {
           mso-displayed-decimal-separator: ",";
           mso-displayed-thousand-separator: ".";
-          mso-padding-alt: 2pt 4pt 2pt 4pt;
+          mso-padding-alt: 1.5pt 3.5pt 1.5pt 3.5pt;
         }
         td, th {
           mso-line-height-rule: exactly;
-          line-height: 11.5pt;
+          line-height: 11pt;
         }
       </style>
     </head>

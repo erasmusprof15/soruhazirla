@@ -51,7 +51,7 @@ export const RubricView: React.FC<RubricViewProps> = ({
   const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
       
       {/* Action Toolbar (print:hidden) */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-4 mb-6 shadow-xs print:hidden flex flex-wrap items-center justify-between gap-4">
@@ -81,14 +81,14 @@ export const RubricView: React.FC<RubricViewProps> = ({
       {/* A4 RUBRIC SHEET (Kompakt & Kağıt Dostu Bütünleşik Tablo Düzeni) */}
       <div 
         id="exam-rubric-print"
-        className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-5 sm:p-7 print:p-0 print:border-none print:shadow-none print:rounded-none text-slate-900 transition-all font-sans"
+        className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-5 sm:p-7 print:!p-0 print:!m-0 print:!border-none print:!border-0 print:!shadow-none print:!rounded-none print:!bg-transparent text-slate-900 transition-all font-sans"
       >
         
         {/* BÜTÜNLEŞİK RESMÎ BAŞLIK VE BİLGİ TABLOSU */}
         <table className="w-full border-collapse border-2 border-black mb-3 text-xs leading-tight">
           <tbody>
             <tr>
-              <td colSpan={4} className="border border-black py-1.5 px-3 text-center">
+              <td colSpan={3} className="border border-black py-1.5 px-3 text-center">
                 <div className="font-bold uppercase tracking-wide text-xs sm:text-sm">
                   T.C. {header.schoolName || 'MİLLÎ EĞİTİM BAKANLIĞI'}
                 </div>
@@ -96,23 +96,18 @@ export const RubricView: React.FC<RubricViewProps> = ({
                   {header.academicYear} &bull; {header.course ? `${header.course} DERSİ ` : ''}{header.grade} &bull; {header.termAndExam}
                 </div>
                 <div className="font-bold uppercase text-[11px] text-slate-700 print:text-black mt-0.5">
-                  {header.grade?.includes('9')
-                    ? 'TÜRKİYE YÜZYILI MAARİF MODELİ (TYMM) CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI'
-                    : 'MEB CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI'}
+                  CEVAP ANAHTARI VE DERECELİ PUANLAMA ANAHTARI
                 </div>
               </td>
             </tr>
             <tr className="bg-slate-50 print:bg-transparent">
-              <td className="border border-black py-1 px-2.5 w-1/4">
-                <strong>Ders:</strong> {header.course || '-'}
-              </td>
-              <td className="border border-black py-1 px-2.5 w-1/4">
+              <td className="border border-black py-1 px-2.5 w-1/3">
                 <strong>Sınıf:</strong> {header.grade || '-'}
               </td>
-              <td className="border border-black py-1 px-2.5 w-1/4">
+              <td className="border border-black py-1 px-2.5 w-1/3">
                 <strong>Sınav Süresi:</strong> {header.duration || '-'}
               </td>
-              <td className="border border-black py-1 px-2.5 w-1/4">
+              <td className="border border-black py-1 px-2.5 w-1/3">
                 <strong>Toplam Puan:</strong> {totalPoints} Puan
               </td>
             </tr>
@@ -188,8 +183,16 @@ export const RubricView: React.FC<RubricViewProps> = ({
                     {/* 2. Soru Kökü Satırı */}
                     <tr>
                       <td colSpan={3} className="border border-slate-300 print:border-black py-1.5 px-2.5 bg-slate-50/50 print:bg-transparent">
-                        <span className="font-bold text-slate-800 mr-1">Soru:</span>
-                        <span className="italic text-slate-900">{cleanPageReferences(q.questionText)}</span>
+                        <div>
+                          <span className="font-bold text-slate-800 mr-1">Soru:</span>
+                          <span className="italic text-slate-900">{cleanPageReferences(q.questionText)}</span>
+                        </div>
+                        {q.materialRef && (
+                          <div className="mt-1 text-[11px] text-slate-600 print:text-black flex items-center gap-1.5">
+                            <span className="font-bold text-slate-700 print:text-black">Kaynak / İlgili Bölüm:</span>
+                            <span className="italic text-slate-700 print:text-black">{q.materialRef}</span>
+                          </div>
+                        )}
                         {q.subQuestions && q.subQuestions.length > 0 && (
                           <div className="mt-1 pl-3 space-y-0.5 not-italic text-[11px]">
                             {q.subQuestions.map((sub, sIdx) => (
@@ -275,6 +278,21 @@ export const RubricView: React.FC<RubricViewProps> = ({
                                   className="w-full p-1.5 border rounded bg-white text-xs"
                                 />
                               </div>
+                            </div>
+
+                            <div>
+                              <label className="font-bold text-slate-700 block mb-0.5">Ders Materyali / Kaynak Notu (Yalnızca Cevap Anahtarı Notu):</label>
+                              <input
+                                type="text"
+                                value={q.materialRef || ''}
+                                onChange={(e) => {
+                                  const updated = [...questions];
+                                  updated[idx] = { ...updated[idx], materialRef: e.target.value };
+                                  onUpdateExam({ ...exam, questions: updated });
+                                }}
+                                className="w-full p-1.5 border rounded bg-white text-xs"
+                                placeholder="Örn: Sayfa 31 (E-Ticaretin Çalışması)"
+                              />
                             </div>
 
                             <button
@@ -382,11 +400,7 @@ export const RubricView: React.FC<RubricViewProps> = ({
         <div className="mt-4 pt-2 border-t border-black page-break-inside-avoid">
           <div className="flex items-center justify-between text-[11px] sm:text-xs leading-tight">
             <div>
-              <span className="font-semibold text-slate-700 print:text-black">
-                {header.grade?.includes('9') ? 'Türkiye Yüzyılı Maarif Modeli Ölçme ve Değerlendirme Kriterleri' : 'MEB Ortaöğretim Ölçme ve Değerlendirme Kriterleri'}
-              </span>
-              <span className="mx-2 text-slate-400">|</span>
-              <span className="text-slate-500 print:text-black">
+              <span className="text-slate-600 print:text-black font-medium">
                 Tarih: {header.date || new Date().toLocaleDateString('tr-TR')}
               </span>
             </div>

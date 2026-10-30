@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Building2, Lock, Sparkles } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeaderSettingsModal } from './components/HeaderSettingsModal';
 import { MaterialAndOptionsForm } from './components/MaterialAndOptionsForm';
@@ -7,7 +8,13 @@ import { RubricView } from './components/RubricView';
 import { MatrixView } from './components/MatrixView';
 import { ExamData, ExamHeader, ExamConfig, MaterialInput, ViewTab } from './types/exam';
 import { exportExamToWord } from './utils/export';
-import { cleanPageReferences } from './utils/cleanText';
+import { cleanPageReferences, extractAndCleanMaterialRef } from './utils/cleanText';
+import {
+  useAutoSave,
+  loadAutoSavedState,
+  LOCKED_FIELDS_STORAGE_KEY,
+  SAVED_HEADER_STORAGE_KEY,
+} from './hooks/useAutoSave';
 
 const DEFAULT_HEADER: ExamHeader = {
   schoolName: '',
@@ -31,9 +38,6 @@ const DEFAULT_CONFIG: ExamConfig = {
   customPrompt: '',
 };
 
-const LOCKED_FIELDS_STORAGE_KEY = 'maarif_locked_header_fields_v1';
-const SAVED_HEADER_STORAGE_KEY = 'maarif_saved_header_v1';
-
 function loadLockedFields(): Partial<Record<keyof ExamHeader, boolean>> {
   try {
     const raw = localStorage.getItem(LOCKED_FIELDS_STORAGE_KEY);
@@ -45,6 +49,10 @@ function loadLockedFields(): Partial<Record<keyof ExamHeader, boolean>> {
 
 function loadInitialHeader(locked: Partial<Record<keyof ExamHeader, boolean>>): ExamHeader {
   try {
+    const autoSaved = loadAutoSavedState();
+    if (autoSaved?.header) {
+      return { ...DEFAULT_HEADER, ...autoSaved.header };
+    }
     const raw = localStorage.getItem(SAVED_HEADER_STORAGE_KEY);
     if (!raw) return DEFAULT_HEADER;
     const saved = JSON.parse(raw) as Partial<ExamHeader>;
@@ -60,14 +68,84 @@ function loadInitialHeader(locked: Partial<Record<keyof ExamHeader, boolean>>): 
   }
 }
 
+function sanitizeExamQuestions(questions: ExamData['questions']): ExamData['questions'] {
+  if (!Array.isArray(questions)) return [];
+  return questions.map((q) => {
+    const { context, questionText, materialRef } = extractAndCleanMaterialRef(
+      q.context,
+      q.questionText,
+      q.materialRef
+    );
+    return {
+      ...q,
+      context: context || '',
+      questionText: questionText || '',
+      materialRef: materialRef || undefined,
+      learningOutcome: cleanPageReferences(q.learningOutcome),
+      processComponent: cleanPageReferences(q.processComponent),
+      subQuestions: q.subQuestions?.map((sub) => ({
+        ...sub,
+        text: cleanPageReferences(sub.text),
+      })),
+      rubric: {
+        ...q.rubric,
+        correctCriteria: cleanPageReferences(q.rubric?.correctCriteria || ''),
+        sampleCorrectAnswer: cleanPageReferences(q.rubric?.sampleCorrectAnswer || ''),
+        partialCriteria: cleanPageReferences(q.rubric?.partialCriteria || ''),
+        samplePartialAnswer: cleanPageReferences(q.rubric?.samplePartialAnswer || ''),
+        wrongCriteria: cleanPageReferences(q.rubric?.wrongCriteria || ''),
+        blankCriteria: cleanPageReferences(q.rubric?.blankCriteria || ''),
+        scoringNotes: q.rubric?.scoringNotes ? cleanPageReferences(q.rubric.scoringNotes) : undefined,
+      },
+    };
+  });
+}
+
+function cleanDisplayError(msg?: string): string {
+  if (!msg) return 'Sınav üretilirken beklenmeyen bir hata oluştu.';
+  const str = typeof msg === 'string' ? msg : JSON.stringify(msg);
+  if (
+    str.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') ||
+    str.includes('API key not valid') ||
+    str.includes('API_KEY_INVALID') ||
+    str.includes('UNAUTHENTICATED') ||
+    str.includes('401')
+  ) {
+    return 'Gemini API anahtarı geçersiz veya yetkilendirilmemiş (401). Lütfen AI Studio panelindeki Settings > Secrets (Ayarlar > Gizli Anahtarlar) bölümünden geçerli bir Gemini API Anahtarı seçtiğinizden veya eklediğinizden emin olunuz.';
+  }
+  if (str.includes('PERMISSION_DENIED') || str.includes('403')) {
+    return 'Gemini API erişim izni reddedildi (403). Lütfen Settings > Secrets panelinden API anahtarınızın model erişim yetkilerini kontrol ediniz.';
+  }
+  if (str.includes('RESOURCE_EXHAUSTED') || str.includes('429')) {
+    return 'Gemini API kullanım kotası aşıldı (429). Lütfen kısa bir süre sonra tekrar deneyiniz veya Settings > Secrets panelinden faturalandırması etkin bir API anahtarı seçiniz.';
+  }
+  return str;
+}
+
 export default function App() {
-  const [examData, setExamData] = useState<ExamData | null>(null);
-  const [currentTab, setCurrentTab] = useState<ViewTab>('exam');
+  const initialAutoSaved = React.useMemo(() => {
+    const state = loadAutoSavedState();
+    if (state?.examData?.questions) {
+      return {
+        ...state,
+        examData: {
+          ...state.examData,
+          questions: sanitizeExamQuestions(state.examData.questions),
+        },
+      };
+    }
+    return state;
+  }, []);
+
+  const [examData, setExamData] = useState<ExamData | null>(() => initialAutoSaved?.examData ?? null);
+  const [currentTab, setCurrentTab] = useState<ViewTab>(() => initialAutoSaved?.currentTab ?? 'exam');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [showGeneratorForm, setShowGeneratorForm] = useState(true);
+  const [showGeneratorForm, setShowGeneratorForm] = useState<boolean>(() =>
+    initialAutoSaved?.examData ? (initialAutoSaved?.showGeneratorForm ?? false) : true
+  );
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Record<string, boolean>>({});
   const [previousQuestionsMap, setPreviousQuestionsMap] = useState<Record<string, ExamData['questions'][number]>>({});
@@ -75,25 +153,29 @@ export default function App() {
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const [lockedFields, setLockedFields] = useState<Partial<Record<keyof ExamHeader, boolean>>>(() =>
-    loadLockedFields()
+    initialAutoSaved?.lockedFields ?? loadLockedFields()
   );
   const [header, setHeader] = useState<ExamHeader>(() =>
-    loadInitialHeader(loadLockedFields())
+    loadInitialHeader(initialAutoSaved?.lockedFields ?? loadLockedFields())
   );
-  const [config, setConfig] = useState<ExamConfig>(DEFAULT_CONFIG);
-  const [material, setMaterial] = useState<MaterialInput>({
-    text: '',
-  });
+  const [config, setConfig] = useState<ExamConfig>(() =>
+    initialAutoSaved?.config ? { ...DEFAULT_CONFIG, ...initialAutoSaved.config } : DEFAULT_CONFIG
+  );
+  const [material, setMaterial] = useState<MaterialInput>(() =>
+    initialAutoSaved?.material ? { text: '', ...initialAutoSaved.material } : { text: '' }
+  );
 
-  // Başlık veya kilit durumu değiştikçe localStorage'a kaydet
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(LOCKED_FIELDS_STORAGE_KEY, JSON.stringify(lockedFields));
-      localStorage.setItem(SAVED_HEADER_STORAGE_KEY, JSON.stringify(header));
-    } catch {
-      // ignore storage errors
-    }
-  }, [header, lockedFields]);
+  // Kullanıcının yaptığı değişiklikleri (başlık ayarları, soru/rubrik düzenlemeleri vb.) periyodik olarak localStorage'a otomatik kaydet
+  useAutoSave({
+    header,
+    lockedFields,
+    config,
+    examData,
+    currentTab,
+    showGeneratorForm,
+    material,
+    intervalMs: 5000,
+  });
 
   const handleToggleLockField = (field: keyof ExamHeader) => {
     setLockedFields((prev) => ({
@@ -102,7 +184,7 @@ export default function App() {
     }));
   };
 
-  // Sağ üstteki "Yeni Sınav" butonuna tıklandığında uygulamayı yenile, sadece sabitlenen başlık bilgilerini koru
+  // "Yeni Sınav" butonuna tıklandığında uygulamayı yenile, sadece sabitlenen başlık bilgilerini koru
   const handleNewExam = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -203,6 +285,9 @@ export default function App() {
         [qId]: targetQuestion,
       }));
 
+      const { context: cleanedContext, questionText: cleanedQuestionText, materialRef: extractedMatRef } =
+        extractAndCleanMaterialRef(gq.context, gq.questionText, gq.materialRef);
+
       const replacementQuestion: ExamData['questions'][number] = {
         id: qId,
         number: targetQuestion.number,
@@ -210,8 +295,9 @@ export default function App() {
         typeLabel: gq.typeLabel || targetQuestion.typeLabel || 'Açık Uçlu Soru',
         learningOutcome: cleanPageReferences(gq.learningOutcome || targetQuestion.learningOutcome),
         processComponent: cleanPageReferences(gq.processComponent || targetQuestion.processComponent),
-        context: cleanPageReferences(gq.context || ''),
-        questionText: cleanPageReferences(gq.questionText || ''),
+        context: cleanedContext || '',
+        questionText: cleanedQuestionText || '',
+        materialRef: extractedMatRef || undefined,
         subQuestions: Array.isArray(gq.subQuestions)
           ? gq.subQuestions.map((sub: any) => ({
               ...sub,
@@ -244,7 +330,7 @@ export default function App() {
       setSuccessNotice(`${targetQuestion.number}. soru için alternatif soru ve dereceli puanlama anahtarı başarıyla güncellendi.`);
     } catch (err: any) {
       console.error('Tekil soru yenileme hatası:', err);
-      setError(err.message || 'Alternatif soru üretilirken bir hata oluştu.');
+      setError(cleanDisplayError(err.message || 'Alternatif soru üretilirken bir hata oluştu.'));
     } finally {
       setRegeneratingIds((prev) => {
         const next = { ...prev };
@@ -373,32 +459,38 @@ export default function App() {
         examTitle: userCourse ? `${userCourse} Dersi ${header.grade} Yazılı Sınavı` : (generated.examTitle || `${header.grade} Yazılı Sınavı`),
         generalInstructions: generated.generalInstructions || header.note,
         header: updatedHeader,
-        questions: (generated.questions || []).map((q: any, idx: number) => ({
-          id: `q-${Date.now()}-${idx}`,
-          number: q.number || idx + 1,
-          type: q.type || 'acik_uclu',
-          typeLabel: q.typeLabel || 'Açık Uçlu Soru',
-          learningOutcome: cleanPageReferences(q.learningOutcome || 'MEB TYMM Öğrenme Çıktısı'),
-          processComponent: cleanPageReferences(q.processComponent || 'SB1. Süreç Bileşeni'),
-          context: cleanPageReferences(q.context || ''),
-          questionText: cleanPageReferences(q.questionText || ''),
-          subQuestions: (q.subQuestions || []).map((sub: any) => ({
-            ...sub,
-            text: cleanPageReferences(sub.text || ''),
-          })),
-          points: Number(q.points) || 10,
-          suggestedLines: Number(q.suggestedLines) || 4,
-          rubric: {
-            correctCriteria: cleanPageReferences(q.rubric?.correctCriteria || 'Doğru ve eksiksiz cevap verilmiştir.'),
-            sampleCorrectAnswer: cleanPageReferences(q.rubric?.sampleCorrectAnswer || 'İdeal cevap...'),
-            partialCriteria: cleanPageReferences(q.rubric?.partialCriteria || 'Kısmi cevap verilmiştir.'),
-            samplePartialAnswer: cleanPageReferences(q.rubric?.samplePartialAnswer || 'Kısmi cevap örneği...'),
-            partialPoints: Number(q.rubric?.partialPoints) || 5,
-            wrongCriteria: cleanPageReferences(q.rubric?.wrongCriteria || 'Yanlış veya ilgisiz cevap.'),
-            blankCriteria: cleanPageReferences(q.rubric?.blankCriteria || 'Soru boş bırakılmıştır.'),
-            scoringNotes: q.rubric?.scoringNotes ? cleanPageReferences(q.rubric.scoringNotes) : undefined,
-          },
-        })),
+        questions: (generated.questions || []).map((q: any, idx: number) => {
+          const { context: cleanedContext, questionText: cleanedQuestionText, materialRef: extractedMatRef } =
+            extractAndCleanMaterialRef(q.context, q.questionText, q.materialRef);
+
+          return {
+            id: `q-${Date.now()}-${idx}`,
+            number: q.number || idx + 1,
+            type: q.type || 'acik_uclu',
+            typeLabel: q.typeLabel || 'Açık Uçlu Soru',
+            learningOutcome: cleanPageReferences(q.learningOutcome || 'MEB TYMM Öğrenme Çıktısı'),
+            processComponent: cleanPageReferences(q.processComponent || 'SB1. Süreç Bileşeni'),
+            context: cleanedContext || '',
+            questionText: cleanedQuestionText || '',
+            materialRef: extractedMatRef || undefined,
+            subQuestions: (q.subQuestions || []).map((sub: any) => ({
+              ...sub,
+              text: cleanPageReferences(sub.text || ''),
+            })),
+            points: Number(q.points) || 10,
+            suggestedLines: Number(q.suggestedLines) || 4,
+            rubric: {
+              correctCriteria: cleanPageReferences(q.rubric?.correctCriteria || 'Doğru ve eksiksiz cevap verilmiştir.'),
+              sampleCorrectAnswer: cleanPageReferences(q.rubric?.sampleCorrectAnswer || 'İdeal cevap...'),
+              partialCriteria: cleanPageReferences(q.rubric?.partialCriteria || 'Kısmi cevap verilmiştir.'),
+              samplePartialAnswer: cleanPageReferences(q.rubric?.samplePartialAnswer || 'Kısmi cevap örneği...'),
+              partialPoints: Number(q.rubric?.partialPoints) || 5,
+              wrongCriteria: cleanPageReferences(q.rubric?.wrongCriteria || 'Yanlış veya ilgisiz cevap.'),
+              blankCriteria: cleanPageReferences(q.rubric?.blankCriteria || 'Soru boş bırakılmıştır.'),
+              scoringNotes: q.rubric?.scoringNotes ? cleanPageReferences(q.rubric.scoringNotes) : undefined,
+            },
+          };
+        }),
       };
 
       setExamData(newExam);
@@ -412,7 +504,7 @@ export default function App() {
       if (err.name === 'AbortError' || err.message?.includes('aborted')) {
         setError('Sınav oluşturma isteği zaman aşımına uğradı. Yüklediğiniz PDF çok büyük olabilir. Lütfen daha az sayfa yükleyiniz veya metin kutusuna ilgili konunun özetini yapıştırarak deneyiniz.');
       } else {
-        setError(err.message || 'Sınav üretilirken beklenmeyen bir hata oluştu.');
+        setError(cleanDisplayError(err.message || 'Sınav üretilirken beklenmeyen bir hata oluştu.'));
       }
     } finally {
       clearTimeout(stageTimer1);
@@ -435,18 +527,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-500 selection:text-white print:min-h-0 print:bg-white print:p-0 print:m-0">
       {/* Üst Navigasyon */}
       <Navbar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
-        hasExam={!!examData}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        hasExam={!!examData && !showGeneratorForm}
         onPrint={handlePrint}
         onExportWord={handleExportWord}
-        onNewExam={handleNewExam}
-        isGenerating={isGenerating}
-        lockedCount={lockedCount}
       />
 
       {/* Sınav Başlık & Okul Ayarları Modalı */}
@@ -466,7 +554,7 @@ export default function App() {
       />
 
       {/* Ana İçerik */}
-      <main className="flex-1 pb-16">
+      <main className="flex-1 pb-16 print:flex-none print:pb-0 print:p-0 print:m-0">
         
         {/* Materyal Yükleme ve Soru Seçenekleri Formu */}
         {(!examData || showGeneratorForm) && (
@@ -493,11 +581,71 @@ export default function App() {
               onGenerate={handleGenerateExam}
               onCancelGenerate={handleCancelGenerate}
               onOpenHeaderSettings={() => setIsSettingsOpen(true)}
+              onNewExam={handleNewExam}
               lockedCount={lockedCount}
               isGenerating={isGenerating}
               generationStage={generationStage}
               error={error}
             />
+          </div>
+        )}
+
+        {/* Sınav görünümündeyken Başlık Bilgilerini Düzenle / Sabitle ve Yeni Sınav kartı */}
+        {examData && !showGeneratorForm && (
+          <div className="max-w-5xl mx-auto px-4 pt-6 print:hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="p-2.5 bg-red-50 text-red-700 rounded-xl shrink-0">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-bold text-slate-900">
+                      Resmî Sınav Başlığı ve Öğretmen Bilgileri
+                    </h2>
+                    {lockedCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                        <Lock className="w-3 h-3 text-amber-700" />
+                        {lockedCount} Bilgi Sabitlendi
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                        Sabitlenmedi
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {header.schoolName || header.teacherName || header.course ? (
+                      <span>
+                        <strong>Okul:</strong> {header.schoolName || 'Belirtilmedi'} &bull;{' '}
+                        <strong>Ders/Sınıf:</strong> {header.course || 'Belirtilmedi'} ({header.grade}) &bull;{' '}
+                        <strong>Öğretmen:</strong> {header.teacherName || 'Belirtilmedi'}
+                      </span>
+                    ) : (
+                      'Okul adı, öğretmen adı, branş ve dönem bilgilerinizi girip sabitleyerek her sınavda tekrar yazmaktan kurtulabilirsiniz.'
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="px-3.5 py-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition-colors"
+                >
+                  Başlık Bilgilerini Düzenle / Sabitle
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNewExam}
+                  title="Uygulamayı yenile ve yeni sınav hazırla (Sabitlenen başlık bilgileri korunur)"
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-red-600" />
+                  <span>Yeni Sınav</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

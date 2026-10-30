@@ -4,9 +4,7 @@ import {
   Award, 
   Printer, 
   Download, 
-  Sparkles, 
   BookOpen, 
-  Settings2,
   TableProperties
 } from 'lucide-react';
 import { ViewTab } from '../types/exam';
@@ -15,23 +13,16 @@ interface NavbarProps {
   currentTab: ViewTab;
   onTabChange: (tab: ViewTab) => void;
   hasExam: boolean;
-  onOpenSettings: () => void;
   onPrint: () => void;
   onExportWord: () => void;
-  onNewExam: () => void;
-  isGenerating: boolean;
-  lockedCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
   onTabChange,
   hasExam,
-  onOpenSettings,
   onPrint,
   onExportWord,
-  onNewExam,
-  lockedCount = 0,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs print:hidden">
@@ -96,58 +87,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Action Buttons in Banner */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              title="Resmî Sınav Başlığı ve Öğretmen Bilgileri"
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-            >
-              <Settings2 className="w-3.5 h-3.5 text-slate-600" />
-              <span className="hidden sm:inline">Başlık Bilgileri</span>
-              <span className="sm:hidden">Başlık</span>
-              {lockedCount > 0 && (
-                <span className="px-1.5 py-0.2 bg-amber-200/90 text-amber-900 text-[10px] font-bold rounded-full">
-                  🔒 {lockedCount}
-                </span>
-              )}
-            </button>
+          {/* Action Buttons in Banner (only shown when exam is open) */}
+          {hasExam && (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={onExportWord}
+                title="Word (.doc) formatında indir"
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Word İndir</span>
+              </button>
 
-            {hasExam && (
-              <>
-                <button
-                  type="button"
-                  onClick={onExportWord}
-                  title="Word (.doc) formatında indir"
-                  className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Word İndir</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onPrint}
-                  title="Yazdır veya PDF olarak kaydet"
-                  className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all"
-                >
-                  <Printer className="w-3.5 h-3.5 text-white" />
-                  <span>Yazdır/PDF kaydet</span>
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={onNewExam}
-              title="Uygulamayı yenile ve yeni sınav hazırla (Sabitlenen başlık bilgileri korunur)"
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-red-600" />
-              <span>Yeni Sınav</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={onPrint}
+                title="Yazdır veya PDF olarak kaydet"
+                className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span>Yazdır/PDF kaydet</span>
+              </button>
+            </div>
+          )}
 
         </div>
 

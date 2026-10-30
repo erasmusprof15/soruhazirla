@@ -37,6 +37,7 @@ export interface ExamQuestion {
   processComponent: string; // TYMM Süreç Bileşeni (SB)
   context?: string; // Metin, durum senaryosu veya vaka
   questionText: string;
+  materialRef?: string; // Cevap anahtarında küçük not olarak yer alacak ders materyali referansı (örn: "Sayfa 31: E-Ticaretin Çalışması")
   subQuestions?: SubQuestion[];
   points: number;
   suggestedLines: number;

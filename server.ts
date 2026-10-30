@@ -26,39 +26,64 @@ app.use((req, _res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+function getGenAI() {
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
     },
-  },
-});
+  });
+}
 
-// Hızlı ve güvenilir model çağrı yardımcısı (Düşük düşünme gecikmesi + model başına zaman aşımı koruması)
+// Gemini API hata mesajlarını kullanıcı dostu ve yol gösterici Türkçe mesajlara dönüştürür
+export function formatGeminiError(err: any): string {
+  const errMsg = typeof err === 'string' ? err : err?.message || JSON.stringify(err) || '';
+  
+  if (
+    errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') ||
+    errMsg.includes('API key not valid') ||
+    errMsg.includes('API_KEY_INVALID') ||
+    errMsg.includes('UNAUTHENTICATED') ||
+    err?.status === 401
+  ) {
+    return 'Gemini API anahtarı geçersiz veya yetkilendirilmemiş (401). Lütfen AI Studio panelindeki Settings > Secrets (Ayarlar > Gizli Anahtarlar) bölümünden geçerli bir Gemini API Anahtarı seçtiğinizden veya eklediğinizden emin olunuz.';
+  }
+  if (errMsg.includes('PERMISSION_DENIED') || err?.status === 403) {
+    return 'Gemini API erişim izni reddedildi (403). Lütfen Settings > Secrets panelinden API anahtarınızın model erişim izinlerini kontrol ediniz.';
+  }
+  if (errMsg.includes('RESOURCE_EXHAUSTED') || err?.status === 429) {
+    return 'Gemini API kullanım kotası aşıldı (429). Lütfen kısa bir süre sonra tekrar deneyiniz veya Settings > Secrets panelinden faturalandırması etkinleştirilmiş bir API anahtarı seçiniz.';
+  }
+  if (errMsg.includes('NOT_FOUND') || err?.status === 404) {
+    return 'İstenen yapay zekâ modeli bulunamadı (404). Lütfen tekrar deneyiniz.';
+  }
+  return errMsg || 'Yapay zekâ yanıt verirken bir hata oluştu. Lütfen tekrar deneyiniz.';
+}
+
+// Hızlı ve güvenilir model çağrı yardımcısı (Desteklenen resmi Gemini modelleri)
 async function callGeminiWithFallback(options: {
   contents: any[];
   config: any;
 }) {
   const candidateConfigs: { model: string; thinkingConfig?: any }[] = [
     {
-      model: 'gemini-3-flash-preview',
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-    },
-    {
-      model: 'gemini-2.5-flash',
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-    {
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gemini-3.8-flash',
       thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
     },
     {
       model: 'gemini-flash-latest',
-      thinkingConfig: { thinkingBudget: 0 },
+    },
+    {
+      model: 'gemini-3.1-flash-lite',
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
     },
   ];
   let lastErr: any = null;
+
+  const ai = getGenAI();
 
   for (const candidate of candidateConfigs) {
     let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -140,10 +165,21 @@ async function extractPdfData(pdfBuffer: Buffer): Promise<{
 }
 
 // Soru kağıdı ve rubriklerde yer alan sayfa atıflarını, kaynak ve kitap sayfası referanslarını temizler
+const MATERIAL_REF_FULL_REGEX =
+  /(?:^|\n|\.\s+)\s*(?:ders\s+materyali|kaynak\s+metin|ders\s+kitab[ıi]|materyal|kitap)?\s*(?:sayfa|sf\.?)\s+[\d\s,veileila'’\-–—]+(?:'?[td][ea]ki|[td][ea]ki|deki|daki)?\s*.*?(?:dayanmaktad[ıi]r|al[ıi]nm[ıi]şt[ıi]r|esas\s+al[ıi]nm[ıi]şt[ıi]r|haz[ıi]rlanm[ıi]şt[ıi]r|dayan[ıi]r|ilgilidir|konusundad[ıi]r)\.?\s*(?=$|\n|\.)/gi;
+
+const MATERIAL_REF_STANDALONE_REGEX =
+  /(?:ders\s+materyali|kaynak\s+metin|ders\s+kitab[ıi]|materyal)\s+(?:sayfa|sf\.?)\s+.*?(?:dayanmaktad[ıi]r|al[ıi]nm[ıi]şt[ıi]r|esas\s+al[ıi]nm[ıi]şt[ıi]r|haz[ıi]rlanm[ıi]şt[ıi]r|dayan[ıi]r|ilgilidir)\.?/gi;
+
 function cleanPageReferences(text?: string): string {
   if (!text || typeof text !== 'string') return '';
 
   let cleaned = text;
+
+  // 0. "Ders materyali sayfa 31'deki ... dayanmaktadır" gibi kalıpları soru kağıdından tamamen temizle
+  cleaned = cleaned.replace(MATERIAL_REF_FULL_REGEX, ' ');
+  cleaned = cleaned.replace(MATERIAL_REF_STANDALONE_REGEX, ' ');
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:ders\s+materyali|kaynak\s+metin|ders\s+kitab[ıi]|materyal)\s*:\s*[^\n]+/gi, ' ');
 
   // 1. "Sayfa X'teki metne/grafiğe/tabloya göre" kalıplarını düzelt
   cleaned = cleaned.replace(/(?:ders\s+kitab[ıi]n[ıi]n\s+)?\d+\.\s*sayfas[ıi]ndaki\s+met(?:in|n)e\s+göre/gi, 'Yukarıdaki metne göre');
@@ -159,26 +195,22 @@ function cleanPageReferences(text?: string): string {
   cleaned = cleaned.replace(/sayfa\s+\d+['’]?[td][ea]ki\s+şekle\s+göre/gi, 'Şekle göre');
 
   // 2. Parantez veya köşeli parantez içinde yer alan sayfa atıfları:
-  // Örn: (Sayfa 24), (Ders Kitabı, Sayfa 24), (Kaynak: Sayfa 15), (sf. 45), (s. 28), [Sayfa 12-14], (Bkz. Sayfa 10), (Sayfa: 45), (Sayfa No: 45)
   cleaned = cleaned.replace(
     /\s*[\(\[]\s*(?:bkz\.?|kaynak\s*:?|al[ıi]nt[ıi]\s*:?)?\s*(?:meb\s+)?(?:[\wğüşıöçĞÜŞİÖÇ\s]+)?(?:ders\s+kitab[ıi]\s*,?\s*|kitap\s*,?\s*)?(?:sayfa\s*(?:no)?|sf\.?|s\.)\s*:?\s*\d+(?:\s*(?:-|–|—|\/|ila|ile)\s*\d+)?\s*[\)\]]/gi,
     ''
   );
-
-  // Örn: (15. sayfa), (15-18. sayfalar), (15. Sayfa)
   cleaned = cleaned.replace(
     /\s*[\(\[]\s*\d+(?:\s*(?:-|–|—|\/|ila|ile)\s*\d+)?\s*['\.]?\s*sayfa(?:lar[ıi]?)?\s*[\)\]]/gi,
     ''
   );
 
   // 3. Satır başı veya sonu kaynak / sayfa satırları:
-  // Örn: "Kaynak: Sayfa 24", "Kaynak: MEB Biyoloji 9, Sayfa 35", "Kaynak: sf. 12"
   cleaned = cleaned.replace(
     /(?:^|\n)\s*(?:kaynak|al[ıi]nt[ıi]|referans)\s*:\s*(?:meb\s+)?(?:[\wğüşıöçĞÜŞİÖÇ\s]+)?(?:ders\s+kitab[ıi]\s*,?\s*|kitap\s*,?\s*)?(?:sayfa\s*(?:no)?|sf\.?|s\.)\s*:?\s*\d+(?:\s*(?:-|–|—|\/|ila|ile)\s*\d+)?\.?\s*(?=$|\n)/gi,
     ''
   );
 
-  // 4. Yıldızlı veya tireli sayfa atfı: "* Sayfa 15...", "* MEB Ders Kitabı Sayfa 40"
+  // 4. Yıldızlı veya tireli sayfa atfı
   cleaned = cleaned.replace(
     /(?:^|\n)\s*[\*\-]\s*(?:meb\s+)?(?:[\wğüşıöçĞÜŞİÖÇ\s]+)?(?:ders\s+kitab[ıi]\s*,?\s*|kitap\s*,?\s*)?(?:sayfa\s*(?:no)?|sf\.?|s\.)\s*:?\s*\d+[^\n]*/gi,
     ''
@@ -188,8 +220,101 @@ function cleanPageReferences(text?: string): string {
   cleaned = cleaned.replace(/\(\s*\)/g, '');
   cleaned = cleaned.replace(/\[\s*\]/g, '');
   cleaned = cleaned.replace(/[ \t]{2,}/g, ' ');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
   return cleaned.trim();
+}
+
+// Bir metnin konu başlığı olup olmadığını belirler
+function isTopicHeading(text?: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  // 1. Doğrudan etiketli başlıklar: "Konu: ...", "Başlık: ...", "Kazanım: ..."
+  if (/^(?:konu|başlık|ünite|tema|bölüm|kazanım)\s*:/i.test(trimmed)) return true;
+
+  // 2. Tırnak içine alınmış hikâye/metin ise (örn: '"Küçük çocuk kasabanın tozlu yolunda..."') ve uzunsa başlık değildir
+  if ((trimmed.startsWith('"') || trimmed.startsWith('“') || trimmed.startsWith('\'')) && trimmed.length > 90) {
+    return false;
+  }
+
+  // 3. 150 karakter veya daha kısa olan tüm tek satırlık başlık kalıpları
+  if (trimmed.length <= 150 && !trimmed.includes('\n')) {
+    if (trimmed.includes('?')) return false;
+
+    const headingSuffixRegex =
+      /(?:katk[ıi]s[ıi]|avantajlar[ıi]|dezavantajlar[ıi]|önemi|plan[ıi]|bileşenleri|paketleri|modelleri|örnekleri|özellikleri|tan[ıi]m[ıi]|türleri|çeşitleri|aşamalar[ıi]|evreleri|ilkeleri|amac[ıi]|kapsam[ıi]|yap[ıi]s[ıi]|işlevi|faktörleri|gelişimi|ilişkisi|etkileri|tarihçesi|yöntemleri|prensipleri|kurallar[ıi]|sonuçlar[ıi]|nedenleri|boyutlar[ıi]|kavram[ıi]|yap[ıi]lanmas[ıi]|dağ[ıi]l[ıi]m[ıi]|araçlar[ıi]|uygulamalar[ıi]|süreçleri|yönetimi|analizi|sertifikas[ıi]|düzenlemeler|hukuku|altyap[ıi]s[ıi]|güvenliği)\.?$/i;
+
+    if (headingSuffixRegex.test(trimmed)) {
+      return true;
+    }
+
+    const sentenceSplit = trimmed.split(/[\.\!\?]\s+[A-ZÇĞİÖŞÜ]/);
+    if (sentenceSplit.length <= 1 && trimmed.length < 110) {
+      const hasNarrativeVerb =
+        /(?:açıklayınız|belirtiniz|yazınız|gösteriniz|çiziniz|hesaplayınız|demiştir|söyledi|anlattı|geçmektedir|yaşanmıştır|başlamıştır|gerçekleşmiştir)/i.test(
+          trimmed
+        );
+      if (!hasNarrativeVerb) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function extractAndCleanMaterialRef(
+  rawContext?: string,
+  rawQuestion?: string,
+  existingRef?: string
+): {
+  context: string;
+  questionText: string;
+  materialRef?: string;
+} {
+  let detectedRef = existingRef ? existingRef.trim() : '';
+
+  if (rawContext) {
+    const match = rawContext.match(MATERIAL_REF_STANDALONE_REGEX);
+    if (!detectedRef && match && match[0]) {
+      detectedRef = match[0]
+        .replace(/^(?:bu\s+soru\s+)?ders\s+materyali\s+/i, '')
+        .replace(/\s*dayanmaktad[ıi]r\.?$/i, '')
+        .replace(/\s*al[ıi]nm[ıi]şt[ıi]r\.?$/i, '')
+        .replace(/\s*esas\s+al[ıi]nm[ıi]şt[ıi]r\.?$/i, '')
+        .trim();
+    } else if (!detectedRef && isTopicHeading(rawContext)) {
+      detectedRef = rawContext.replace(/\.$/, '').trim();
+    }
+  }
+
+  if (!detectedRef && rawQuestion) {
+    const match = rawQuestion.match(MATERIAL_REF_STANDALONE_REGEX);
+    if (match && match[0]) {
+      detectedRef = match[0]
+        .replace(/^(?:bu\s+soru\s+)?ders\s+materyali\s+/i, '')
+        .replace(/\s*dayanmaktad[ıi]r\.?$/i, '')
+        .replace(/\s*al[ıi]nm[ıi]şt[ıi]r\.?$/i, '')
+        .replace(/\s*esas\s+al[ıi]nm[ıi]şt[ıi]r\.?$/i, '')
+        .trim();
+    }
+  }
+
+  let cleanedContext = cleanPageReferences(rawContext);
+  const cleanedQuestion = cleanPageReferences(rawQuestion);
+
+  // KESİN KURAL: Eğer context bir konu başlığı ise soru kağıdında ASLA gösterilmez!
+  if (isTopicHeading(cleanedContext)) {
+    cleanedContext = '';
+  }
+
+  return {
+    context: cleanedContext,
+    questionText: cleanedQuestion,
+    materialRef: detectedRef || undefined,
+  };
 }
 
 // Öğretmenin özel notundan veya sayfa aralığı kutularından istenen sayfa aralığını tespit eden akıllı fonksiyon
@@ -334,7 +459,9 @@ function buildHomogeneousQuestionBuckets(
 
     bucketBlocks.push(
       `==================== [${qNum}. SORU İÇİN ZORUNLU KAYNAK BÖLÜMÜ (SAYFA ${pageNumsLabel})] ====================\n` +
-        `DİKKAT: Sınavın ${qNum}. sorusunu İSTİSNASIZ aşağıdaki Sayfa ${pageNumsLabel} metninden ve konusundan üret:\n\n` +
+        `DİKKAT: Sınavın ${qNum}. sorusunu İSTİSNASIZ aşağıdaki Sayfa ${pageNumsLabel} metninden ve konusundan üret.\n` +
+        `KESİNLİKLE soru metnine (questionText) veya bağlama (context) 'Ders materyali sayfa...' yazma; soruyu doğrudan doğal sınav sorusu olarak sor.\n` +
+        `Sayfa/bölüm bilgisini yalnızca cevap anahtarı için 'materialRef' alanına (örn: "Sayfa ${pageNumsLabel}") yaz:\n\n` +
         `${combinedPageText}\n` +
         `====================================================================================================`
     );
@@ -595,9 +722,14 @@ SINIF VE MODEL FARKI:
      * Yanlış Cevap (0 Puan): İlgisiz, yanıltıcı veya temel kavram hatası içeren cevap kriteri.
      * Boş Cevap (0 Puan): Cevap verilmemiş olması durumu kriteri.
 6. Puanların toplamı tam olarak ${totalPoints} puan olmalıdır. Her sorunun puanı (points) belirtilmeli ve toplamları ${totalPoints}'e eşit olmalıdır.
-7. KESİNLİKLE SAYFA ATFI / KİTAP SAYFASI NUMARASI YAZILMAYACAKTIR:
-   - Soru kağıdındaki soruların altında (context içinde), soru köklerinde, alt sorularda veya rubrikte KESİNLİKLE sayfa numarası veya kitap sayfası atfı ("Sayfa 14", "(Ders Kitabı Sayfa 25)", "(Kaynak: Sayfa 12)", "(sf. 18)", "(s. 45)", "[Sayfa 30]", "(Ders kitabının 15. sayfasındaki metne göre)", "Kaynak: Sayfa 15" vb.) YAZILMAYACAKTIR.
-   - Soru kağıdı öğrencinin karşısına çıktığında metin veya deney senaryosu context içerisinde kendi kendine yeten bir şekilde verilmeli, sayfa atıfları tamamen çıkarılmalıdır.`;
+7. KESİNLİKLE SORU METNİNDE VEYA BAĞLAMINDA MATERYAL/SAYFA REFERANSI YAZMAYINIZ:
+   - Soru kökünde (questionText), bağlamda (context) veya alt sorularda (subQuestions) ASLA "Ders materyali sayfa 31'deki ... konusuna dayanmaktadır", "Ders materyali sayfa 40'taki...", "Ders kitabının 15. sayfasına göre" gibi ders materyaline veya sayfa numarasına atıf yapan ifadeler YAZILMAYACAKTIR!
+   - Soru kağıdı doğrudan öğrenciye verileceğinden, sorular bağımsız, doğal ve doğrudan öğrenciye hitap eden bir sınav sorusu olmalıdır. Öğrenci soru kağıdında materyal adı veya sayfa referansı görmemelidir.
+8. DERS MATERYALİ REFERANSI SADECE CEVAP ANAHTARI İÇİN "materialRef" ALANINA YAZILIR:
+   - Sorunun ders materyalindeki hangi sayfadan veya başlıktan hazırlandığı bilgisini YALNIZCA öğretmen için oluşturulan "materialRef" alanında belirtiniz (örn: "Sayfa 31: E-Ticaretin Çalışması", "Sayfa 40: Operasyon Planı"). Bu bilgi soru kağıdında değil, yalnızca cevap anahtarında küçük bir not olarak gösterilecektir.
+9. KESİNLİKLE HER SORUNUN BAŞINA KONU BAŞLIĞI YAZMAYINIZ:
+   - Soru kağıdındaki soruların başında veya "context" alanında ASLA "Ticaretin tarihsel gelişimi ve internetin globalleşmeye katkısı.", "E-ticaretin müşteri açısından avantajları.", "E-ticaret modelleri ve uygulama örnekleri.", "E-ticaret operasyon planı." gibi KONU BAŞLIKLARI YAZILMAYACAKTIR!
+   - "context" alanı asla konu başlığı veya etiket yazmak için KULLANILMAZ. "context" YALNIZCA VE SADECE Türkçe/Edebiyat veya paragraf sorularında öğrencinin okuyup cevaplayacağı uzun bir okuma parçası/metin varsa kullanılır. Normal ders sorularında (mesleki gelişim, tarih, coğrafya, felsefe vb.) context alanını boş bırakınız ("") ve soruyu doğrudan "questionText" içine yazınız.`;
 
     const hasMaterial = Boolean(materialSourceText || usePdfInline);
     const hasSyllabus = Boolean(effectiveSyllabusText || useSyllabusPdfInline);
@@ -737,7 +869,6 @@ ${annualPlanScope ? `Yıllık Plan Tarih/Hafta Kapsamı: ${annualPlanScope}\n` :
       contents,
       config: {
         systemInstruction,
-        temperature: 0.3,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -755,8 +886,9 @@ ${annualPlanScope ? `Yıllık Plan Tarih/Hafta Kapsamı: ${annualPlanScope}\n` :
                   typeLabel: { type: Type.STRING },
                   learningOutcome: { type: Type.STRING },
                   processComponent: { type: Type.STRING },
-                  context: { type: Type.STRING, description: 'Soru metninin dayandığı bağlam, paragraf, durum veya veri (varsa)' },
-                  questionText: { type: Type.STRING, description: 'Öğrenciye yöneltilen net soru kökü' },
+                  context: { type: Type.STRING, description: 'Yalnızca Türkçe/Edebiyat veya paragraf sorularında öğrencinin okuyacağı uzun okuma metni/paragraf varsa kullanılır. ASLA konu başlığı veya etiket YAZMAYINIZ. Normal sorularda boş bırakınız ("").' },
+                  questionText: { type: Type.STRING, description: 'Öğrenciye yöneltilen net soru kökü. ASLA sayfa numarası veya materyal atfı yazmayın.' },
+                  materialRef: { type: Type.STRING, description: 'YALNIZCA cevap anahtarında öğretmene küçük bir not olarak gösterilmek üzere sorunun hazırlandığı sayfa ve konu başlığı (örn: "Sayfa 31: E-Ticaretin Çalışması"). Soru köküne veya context içine KESİNLİKLE yazmayın.' },
                   subQuestions: {
                     type: Type.ARRAY,
                     items: {
@@ -816,21 +948,29 @@ ${annualPlanScope ? `Yıllık Plan Tarih/Hafta Kapsamı: ${annualPlanScope}\n` :
     const responseText = response.text || '{}';
     const parsedData = JSON.parse(responseText);
 
-    // Soruların context, soru kökü ve alt sorularındaki sayfa atıflarını temizle
+    // Soruların context, soru kökü ve alt sorularındaki sayfa atıflarını temizle; materyal referansını cevap anahtarı notuna taşı
     if (parsedData.questions && Array.isArray(parsedData.questions)) {
-      parsedData.questions = parsedData.questions.map((q: any) => ({
-        ...q,
-        context: cleanPageReferences(q.context),
-        questionText: cleanPageReferences(q.questionText),
-        learningOutcome: cleanPageReferences(q.learningOutcome),
-        processComponent: cleanPageReferences(q.processComponent),
-        subQuestions: Array.isArray(q.subQuestions)
-          ? q.subQuestions.map((sub: any) => ({
-              ...sub,
-              text: cleanPageReferences(sub.text),
-            }))
-          : [],
-      }));
+      parsedData.questions = parsedData.questions.map((q: any) => {
+        const { context, questionText, materialRef } = extractAndCleanMaterialRef(
+          q.context,
+          q.questionText,
+          q.materialRef
+        );
+        return {
+          ...q,
+          context: context || '',
+          questionText: questionText || '',
+          materialRef: materialRef || undefined,
+          learningOutcome: cleanPageReferences(q.learningOutcome),
+          processComponent: cleanPageReferences(q.processComponent),
+          subQuestions: Array.isArray(q.subQuestions)
+            ? q.subQuestions.map((sub: any) => ({
+                ...sub,
+                text: cleanPageReferences(sub.text),
+              }))
+            : [],
+        };
+      });
     }
 
     return res.json({
@@ -839,9 +979,13 @@ ${annualPlanScope ? `Yıllık Plan Tarih/Hafta Kapsamı: ${annualPlanScope}\n` :
     });
   } catch (error: any) {
     console.error('Sınav oluşturma hatası:', error);
-    return res.status(500).json({
+    const friendlyMessage = formatGeminiError(error);
+    const statusCode = error?.status === 401 || String(error?.message).includes('401') ? 401 :
+                       error?.status === 403 ? 403 :
+                       error?.status === 429 ? 429 : 500;
+    return res.status(statusCode).json({
       success: false,
-      error: error.message || 'Sınav kağıdı ve rubrik oluşturulurken bir hata meydana geldi.',
+      error: friendlyMessage,
     });
   }
 });
@@ -1005,7 +1149,6 @@ DİKKAT: Yeni alternatif soruyu yıllık plandaki ilgili tarih/hafta/tatil aral�
       contents: [{ text: promptParts.join('\n\n') }],
       config: {
         systemInstruction,
-        temperature: 0.65,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -1015,8 +1158,9 @@ DİKKAT: Yeni alternatif soruyu yıllık plandaki ilgili tarih/hafta/tatil aral�
             typeLabel: { type: Type.STRING },
             learningOutcome: { type: Type.STRING },
             processComponent: { type: Type.STRING },
-            context: { type: Type.STRING },
-            questionText: { type: Type.STRING },
+            context: { type: Type.STRING, description: 'Soru bağlamı (varsa). KESİNLİKLE sayfa veya ders materyali atfı içermemelidir.' },
+            questionText: { type: Type.STRING, description: 'Öğrenciye yöneltilen net soru kökü. ASLA sayfa numarası veya materyal atfı yazmayın.' },
+            materialRef: { type: Type.STRING, description: 'YALNIZCA cevap anahtarında öğretmene küçük bir not olarak gösterilmek üzere sorunun hazırlandığı sayfa ve konu başlığı (örn: "Sayfa 31: E-Ticaretin Çalışması"). Soru köküne veya context içine KESİNLİKLE yazmayın.' },
             subQuestions: {
               type: Type.ARRAY,
               items: {
@@ -1073,8 +1217,16 @@ DİKKAT: Yeni alternatif soruyu yıllık plandaki ilgili tarih/hafta/tatil aral�
     if (parsed) {
       parsed.number = qNum;
       parsed.points = qPoints;
-      parsed.context = cleanPageReferences(parsed.context);
-      parsed.questionText = cleanPageReferences(parsed.questionText);
+
+      const { context, questionText, materialRef } = extractAndCleanMaterialRef(
+        parsed.context,
+        parsed.questionText,
+        parsed.materialRef
+      );
+
+      parsed.context = context || '';
+      parsed.questionText = questionText || '';
+      parsed.materialRef = materialRef || undefined;
       parsed.learningOutcome = cleanPageReferences(parsed.learningOutcome);
       parsed.processComponent = cleanPageReferences(parsed.processComponent);
       if (parsed.rubric) {
@@ -1098,7 +1250,11 @@ DİKKAT: Yeni alternatif soruyu yıllık plandaki ilgili tarih/hafta/tatil aral�
     return res.json({ success: true, question: parsed });
   } catch (err: any) {
     console.error('Soru yenileme hatası:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Alternatif soru üretilirken bir hata oluştu.' });
+    const friendlyMessage = formatGeminiError(err);
+    const statusCode = err?.status === 401 || String(err?.message).includes('401') ? 401 :
+                       err?.status === 403 ? 403 :
+                       err?.status === 429 ? 429 : 500;
+    return res.status(statusCode).json({ success: false, error: friendlyMessage });
   }
 });
 

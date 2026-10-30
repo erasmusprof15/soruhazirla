@@ -8,40 +8,112 @@
   }
 }
 
-/* Baskı / Yazdırma (Print) Özelleştirmeleri */
+/* Baskı / Yazdırma (Print & PDF Kaydet) Özelleştirmeleri */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0.8cm 1cm 0.8cm 1cm;
+    margin: 0.6cm 0.8cm 0.6cm 0.8cm;
   }
 
-  body {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 10pt !important;
+    font-size: 9.5pt !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    overflow: visible !important;
   }
 
+  /* Arka plandaki tüm kutu gölgelerini, çerçeveleri ve silik sınırları sıfırla */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Dış layout taşıyıcılarının (main, container, max-w vb.) kenarlık ve paddinglerini sıfırla */
+  main,
+  .max-w-5xl,
+  .max-w-6xl,
+  .max-w-7xl,
+  div[class*="max-w-"],
+  div[class*="min-h-"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    border: none !important;
+    border-width: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* Sınav kağıdı, cevap anahtarı ve dağılım çizelgesi print kapsayıcıları:
+     Kenarlık (border) ve gölge (shadow) kesinlikle kapatılır.
+     Yükseklik (min-height) içerik bittiği yerde biter; asla gereksiz boş sayfa sarkıtmaz. */
+  #exam-paper-print,
+  #exam-rubric-print,
+  #exam-matrix-print {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    border: none !important;
+    border-width: 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Soru bloklarının hover/focus çerçevelerini baskıda sıfırla */
+  #exam-paper-print div,
+  #exam-rubric-print div,
+  #exam-matrix-print div {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Baskıda gizlenecek öğeler */
   .no-print,
   header,
   footer,
   nav,
-  button {
+  button,
+  .print\:hidden {
     display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    visibility: hidden !important;
   }
 
   .page-break-inside-avoid {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .page-break-before-always {
-    break-before: page;
-    page-break-before: always;
+    break-before: page !important;
+    page-break-before: always !important;
   }
 
-  /* Kenarlıkların baskıda net çıkması */
+  /* Sadece resmî tabloların kenarlıkları korunsun */
+  table {
+    border-collapse: collapse !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
   table, th, td {
     border-color: #000000 !important;
   }

@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { ExamData, ExamQuestion } from '../types/exam';
-import { cleanPageReferences } from '../utils/cleanText';
+import { cleanPageReferences, isTopicHeading } from '../utils/cleanText';
 
 interface ExamPaperViewProps {
   exam: ExamData;
@@ -116,7 +116,7 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
   const totalCalculatedPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
       
       {/* Action Bar / Controls (Excluded from print) */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-4 mb-3 shadow-xs print:hidden flex flex-wrap items-center justify-between gap-4">
@@ -199,37 +199,35 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
       {/* A4 PAPER CONTAINER */}
       <div 
         id="exam-paper-print"
-        className={`bg-white rounded-xl shadow-xl border border-slate-200/80 p-8 sm:p-12 print:p-0 print:border-none print:shadow-none print:rounded-none text-slate-900 transition-all font-serif ${
-          fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base' : 'text-sm'
+        className={`bg-white rounded-xl shadow-xl border border-slate-200/80 p-8 sm:p-10 min-h-[29.7cm] print:min-h-0 print:!p-0 print:!m-0 print:!border-none print:!border-0 print:!shadow-none print:!rounded-none print:!bg-transparent text-slate-900 transition-all font-sans font-normal ${
+          fontSize === 'sm' ? 'text-[10.5px]' : fontSize === 'lg' ? 'text-[12.5px]' : 'text-[11.5px]'
         }`}
-        style={{ minHeight: '29.7cm' }}
+        style={{ fontFamily: "'Plus Jakarta Sans', 'Segoe UI', 'Calibri', system-ui, sans-serif" }}
       >
         
         {/* BİRLEŞTİRİLMİŞ KOMPAKT RESMÎ MEB SINAV BAŞLIĞI VE ÖĞRENCİ BİLGİ TABLOSU */}
-        <table className="w-full border-collapse border-2 border-black mb-3 text-xs leading-tight">
+        <table className="w-full border-collapse border-2 border-black mb-2.5 text-[11px] leading-tight">
           <tbody>
             <tr>
               <td colSpan={3} className="border border-black py-1.5 px-3 text-center">
-                <div className="text-xs sm:text-sm font-extrabold tracking-wide uppercase leading-tight">
+                <div className="text-xs font-bold tracking-wide uppercase leading-tight">
                   T.C. {header.schoolName}
                 </div>
-                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-normal leading-tight mt-0.5">
+                <div className="text-[11px] font-semibold uppercase tracking-normal leading-tight mt-0.5">
                   {header.academicYear} &bull; {header.course ? `${header.course} DERSİ ` : ''}{header.termAndExam}
                 </div>
               </td>
             </tr>
             <tr>
               <td className="border border-black py-1 px-2.5 w-[38%]">
-                <span className="font-semibold">Ders:</span> <strong className="font-bold">{header.course}</strong>
-                <span className="mx-1.5 text-slate-400">|</span>
-                <span className="font-semibold">Sınıf:</span> <strong className="font-bold">{header.grade} / ....</strong>
+                <span className="font-semibold">Sınıf:</span> <span className="font-normal">{header.grade} / ....</span>
               </td>
               <td className="border border-black py-1 px-2.5 w-[34%]">
                 <span className="font-semibold">Adı Soyadı:</span>
               </td>
-              <td rowSpan={2} className="border border-black py-1 px-2.5 w-[28%] align-middle text-[11px] leading-snug">
-                <div><strong>Aldığı Not</strong> &nbsp; <strong>Rakamla:</strong> ...............</div>
-                <div className="mt-0.5"><strong>Yazıyla:</strong> ......................................</div>
+              <td rowSpan={2} className="border border-black py-1 px-2.5 w-[28%] align-middle text-[10.5px] leading-snug">
+                <div><span className="font-semibold">Aldığı Not</span> &nbsp; <span className="font-semibold">Rakamla:</span> ...............</div>
+                <div className="mt-0.5"><span className="font-semibold">Yazıyla:</span> ......................................</div>
               </td>
             </tr>
             <tr>
@@ -240,15 +238,13 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
               </td>
               <td className="border border-black py-1 px-2.5">
                 <span className="font-semibold">Numarası:</span> .................
-                <span className="mx-1.5 text-slate-400">|</span>
-                <span className="font-semibold">Puan:</span> {totalCalculatedPoints}
               </td>
             </tr>
           </tbody>
         </table>
 
         {/* SORULAR LİSTESİ */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           {questions.map((q, idx) => {
             const isEditing = editingId === q.id;
             const isSelected = selectedQuestionId === q.id;
@@ -576,52 +572,59 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
                       </div>
                     )}
 
-                    {/* Soru Bağlamı ve Soru Kökü (Kağıt Tasarruflu Kompakt Görünüm) */}
-                    {cleanPageReferences(q.context) ? (
-                      <>
-                        <div className="mb-1 text-slate-900 text-justify leading-snug">
-                          <span className="font-bold mr-1">
+                    {/* Soru Bağlamı ve Soru Kökü (Kağıt Tasarruflu İnce & Kompakt Görünüm - Konu Başlıkları Gösterilmez) */}
+                    {(() => {
+                      const cleanedContext = cleanPageReferences(q.context);
+                      const isValidContext = cleanedContext && !isTopicHeading(cleanedContext);
+                      const cleanedQText = cleanPageReferences(q.questionText);
+
+                      return isValidContext ? (
+                        <>
+                          <div className="mb-0.5 text-slate-800 text-justify leading-snug font-normal">
+                            <span className="font-semibold mr-1">
+                              {q.number}.
+                            </span>
+                            <span className="italic">{cleanedContext}</span>
+                          </div>
+                          <div className="font-normal mb-1 text-justify leading-snug text-slate-900">
+                            {cleanedQText} <span className="font-semibold">({q.points} Puan)</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="font-normal mb-1 text-justify leading-snug text-slate-900">
+                          <span className="font-semibold mr-1">
                             {q.number}.
                           </span>
-                          <span className="italic">{cleanPageReferences(q.context)}</span>
+                          <span>{cleanedQText}</span>{' '}
+                          <span className="font-semibold">({q.points} Puan)</span>
                         </div>
-                        <div className="font-bold mb-1.5 text-justify leading-snug">
-                          {cleanPageReferences(q.questionText)} ({q.points} Puan)
-                        </div>
-                      </>
-                    ) : (
-                      <div className="font-bold mb-1.5 text-justify leading-snug">
-                        <span className="mr-1">
-                          {q.number}.
-                        </span>
-                        <span>{cleanPageReferences(q.questionText)} ({q.points} Puan)</span>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Alt Sorular (Maddeli için) */}
                     {q.subQuestions && q.subQuestions.length > 0 && (
-                      <div className="pl-3 space-y-0.5 mb-1.5 font-medium text-xs sm:text-sm leading-snug">
+                      <div className="pl-3 space-y-0.5 mb-1 font-normal text-[11px] leading-snug">
                         {q.subQuestions.map((sub, sIdx) => (
                           <div key={sIdx} className="flex items-start gap-1.5">
-                            <span className="font-bold">{sub.label}</span>
+                            <span className="font-semibold">{sub.label}</span>
                             <span className="flex-1">{cleanPageReferences(sub.text)}</span>
-                            <span className="text-xs italic">({sub.points} P)</span>
+                            <span className="text-[10.5px] italic">({sub.points} P)</span>
                           </div>
                         ))}
                       </div>
                     )}
 
                     {/* CEVAPLAMA ALANI (Kompakt Noktalı / Çizgili / Kutu) */}
-                    <div className="mt-1 mb-1">
+                    <div className="mt-0.5 mb-0.5">
                       {lineStyle === 'box' ? (
                         <div 
                           className="border border-slate-400 rounded p-1.5 text-[10px] text-slate-400 font-sans"
-                          style={{ minHeight: `${Math.max(36, Math.round((q.suggestedLines || 3) * 12))}px` }}
+                          style={{ minHeight: `${Math.max(32, Math.round((q.suggestedLines || 3) * 11))}px` }}
                         >
                           Cevap:
                         </div>
                       ) : (
-                        <div className="space-y-3 pt-1">
+                        <div className="space-y-2.5 pt-0.5">
                           {Array.from({ length: Math.min(4, Math.max(2, Math.round((q.suggestedLines || 3) * 0.6))) }).map((_, lineIdx) => (
                             <div 
                               key={lineIdx} 
@@ -645,18 +648,18 @@ export const ExamPaperView: React.FC<ExamPaperViewProps> = ({
         </div>
 
         {/* EN ALT BİLGİ: ÖĞRETMEN VE İMZA ALANI (Kompakt Tek Satır) */}
-        <div className="mt-4 pt-2 border-t border-black page-break-inside-avoid">
-          <div className="flex items-center justify-between gap-4 text-[11px] sm:text-xs leading-tight">
+        <div className="mt-3 pt-1.5 border-t border-black page-break-inside-avoid">
+          <div className="flex items-center justify-between gap-4 text-[10.5px] leading-tight">
             <p className="italic">
               {header.note || 'Soruları dikkatlice okuyunuz. Her sorunun cevabını altına bırakılan alana okunaklı şekilde yazınız. Başarılar dileriz.'}
             </p>
             <div className="text-right shrink-0">
-              <span className="font-bold">
+              <span className="font-semibold">
                 {header.teacherName || '................................'}
               </span>
               {header.teacherBranch ? <span className="ml-1">({header.teacherBranch})</span> : null}
               <span className="mx-2 text-slate-400">|</span>
-              <span className="font-medium">İmza: ........................</span>
+              <span className="font-normal">İmza: ........................</span>
             </div>
           </div>
         </div>

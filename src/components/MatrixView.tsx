@@ -20,7 +20,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
       
       {/* Toolbar */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-4 mb-6 shadow-xs print:hidden flex flex-wrap items-center justify-between gap-4">
@@ -43,7 +43,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
       {/* Sheet */}
       <div 
         id="exam-matrix-print"
-        className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-8 sm:p-10 print:p-0 print:border-none print:shadow-none print:rounded-none text-slate-900 font-sans"
+        className="bg-white rounded-xl shadow-xl border border-slate-200/80 p-8 sm:p-10 print:!p-0 print:!m-0 print:!border-none print:!border-0 print:!shadow-none print:!rounded-none print:!bg-transparent text-slate-900 font-sans"
       >
         
         {/* Başlık */}
@@ -55,7 +55,7 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
             {header.academicYear} &bull; {header.course} DERSİ {header.grade}
           </div>
           <div className="text-xs sm:text-sm font-bold uppercase tracking-normal text-slate-700 print:text-black">
-            {header.termAndExam} &bull; {header.grade?.includes('9') ? 'TÜRKİYE YÜZYILI MAARİF MODELİ (TYMM) SORU VE KAZANIM DAĞILIM TABLOSU' : 'MEB ORTAÖĞRETİM KAZANIM VE SORU DAĞILIM TABLOSU'}
+            {header.termAndExam} &bull; SORU VE KAZANIM DAĞILIM TABLOSU
           </div>
         </div>
 

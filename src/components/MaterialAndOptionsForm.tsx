@@ -28,6 +28,7 @@ interface MaterialAndOptionsFormProps {
   onGenerate: () => void;
   onCancelGenerate?: () => void;
   onOpenHeaderSettings?: () => void;
+  onNewExam?: () => void;
   lockedCount?: number;
   isGenerating: boolean;
   generationStage?: number;
@@ -45,6 +46,7 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
   onGenerate,
   onCancelGenerate,
   onOpenHeaderSettings,
+  onNewExam,
   lockedCount = 0,
   isGenerating,
   generationStage = 0,
@@ -388,13 +390,26 @@ export const MaterialAndOptionsForm: React.FC<MaterialAndOptionsFormProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpenHeaderSettings}
-            className="px-3.5 py-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition-colors shrink-0 self-start sm:self-center"
-          >
-            Başlık Bilgilerini Düzenle / Sabitle
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center">
+            <button
+              type="button"
+              onClick={onOpenHeaderSettings}
+              className="px-3.5 py-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition-colors"
+            >
+              Başlık Bilgilerini Düzenle / Sabitle
+            </button>
+            {onNewExam && (
+              <button
+                type="button"
+                onClick={onNewExam}
+                title="Uygulamayı yenile ve yeni sınav hazırla (Sabitlenen başlık bilgileri korunur)"
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-red-600" />
+                <span>Yeni Sınav</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
